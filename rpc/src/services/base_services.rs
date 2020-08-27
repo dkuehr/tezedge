@@ -233,7 +233,8 @@ pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_
     //     }
     // };
 
-    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone());
+    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone(),
+        persistent_storage.merkle());
     let context_index = ContextIndex::new(Some(ctxt_level.try_into()?), None);
     let context_data = context.get_by_key_prefix(&context_index, &vec!["data/cycle/".to_string()])?;
 
@@ -319,7 +320,8 @@ pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_
 pub(crate) fn get_cycle_from_context_as_json(level: &str, cycle_id: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<CycleJson>, failure::Error> {
     let level: usize = level.parse()?;
 
-    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone());
+    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone(),
+        persistent_storage.merkle());
     let context_index = ContextIndex::new(Some(level.try_into()?), None);
 
     let random_seed = context.get_key(&context_index, &vec![format!("data/cycle/{}/random_seed", &cycle_id)])?; // list.get_key(level, &format!("data/cycle/{}/random_seed", &cycle_id));
@@ -340,7 +342,8 @@ pub(crate) fn get_cycle_from_context_as_json(level: &str, cycle_id: &str, list: 
 pub(crate) fn get_rolls_owner_current_from_context(level: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<HashMap<String, HashMap<String, HashMap<String, String>>>>, failure::Error> {
     let ctxt_level: usize = level.parse().unwrap();
 
-    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone());
+    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone(),
+        persistent_storage.merkle());
     let context_index = ContextIndex::new(Some(ctxt_level.try_into()?), None);
     let context_data = context.get_by_key_prefix(&context_index, &vec!["data/rolls/owner/current/".to_string()])?;
 

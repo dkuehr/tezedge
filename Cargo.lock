@@ -1233,10 +1233,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "im-rc"
+name = "im"
 version = "15.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ca8957e71f04a205cb162508f9326aea04676c8dfd0711220190d6b83664f3f"
+checksum = "111c1983f3c5bb72732df25cddacee9b546d08325fb584b5ebd38148be7b0246"
 dependencies = [
  "bitmaps",
  "rand_core",
@@ -2925,7 +2925,7 @@ dependencies = [
  "failure",
  "getset",
  "hex",
- "im-rc",
+ "im",
  "itertools",
  "lazy_static",
  "maplit",
