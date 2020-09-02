@@ -6,7 +6,7 @@ use std::string::ToString;
 use failure::bail;
 
 use storage::skip_list::Bucket;
-use storage::context::{TezedgeContext, ContextIndex, ContextApi};
+use storage::context::{TezedgeContext, ContextApi};
 use tezos_messages::base::signature_public_key::SignaturePublicKey;
 use tezos_messages::p2p::binary_message::BinaryMessage;
 

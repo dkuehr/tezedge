@@ -11,7 +11,7 @@ use getset::Getters;
 use crypto::blake2b;
 use storage::num_from_slice;
 use storage::persistent::PersistentStorage;
-use storage::context::{TezedgeContext, ContextIndex, ContextApi};
+use storage::context::{TezedgeContext, ContextApi};
 use storage::skip_list::Bucket;
 use tezos_messages::base::signature_public_key_hash::SignaturePublicKeyHash;
 use tezos_messages::p2p::binary_message::BinaryMessage;
