@@ -11,7 +11,7 @@ use crypto::hash::{BlockHash, ContextHash, HashType};
 use crate::{BlockStorage, BlockStorageReader, StorageError};
 use crate::persistent::{ContextList, ContextMap};
 use crate::skip_list::{Bucket, SkipListError};
-use crate::merkle_storage::MerkleStorage;
+use crate::merkle_storage::{MerkleStorage, MerkleError};
 
 /// Possible errors for context
 #[derive(Debug, Fail)]
@@ -44,11 +44,20 @@ pub enum ContextError {
         context_hash: String,
         error: StorageError,
     },
+    #[fail(display = "Failed operation on Merkle storage: {}", error)]
+    MerkleStorageError {
+        error: MerkleError
+    },
 }
 
 impl From<SkipListError> for ContextError {
     fn from(error: SkipListError) -> Self {
         ContextError::CommitWriteError { error }
+    }
+}
+impl From<MerkleError> for ContextError {
+    fn from(error: MerkleError) -> Self {
+        ContextError::MerkleStorageError { error }
     }
 }
 
@@ -76,7 +85,7 @@ pub trait ContextApi {
 
     /// Commit new generated context diff to storage
     /// if parent_context_hash is empty, it means that its a commit_genesis a we dont assign context_hash to header
-    fn commit(&mut self, block_hash: &BlockHash, parent_context_hash: &Option<ContextHash>, new_context_hash: &ContextHash, context_diff: &ContextDiff) -> Result<(), ContextError>;
+    fn commit(&mut self, block_hash: &BlockHash, parent_context_hash: &Option<ContextHash>, new_context_hash: &ContextHash, context_diff: &ContextDiff, author: String, message: String, date: i64) -> Result<(), ContextError>;
 
     /// Checks context and resolves keys to be delete a place them to diff, and also deletes keys from diff
     fn delete_to_diff(&self, context_hash: &Option<ContextHash>, key_prefix_to_delete: &Vec<String>, context_diff: &mut ContextDiff) -> Result<(), ContextError>;
@@ -121,6 +130,7 @@ impl ContextIndex {
 pub struct ContextDiff {
     pub predecessor_index: ContextIndex,
     pub diff: ContextMap,
+    merkle: Arc<RwLock<MerkleStorage>>,
 }
 
 impl fmt::Debug for ContextDiff {
@@ -132,10 +142,12 @@ impl fmt::Debug for ContextDiff {
 }
 
 impl ContextDiff {
-    pub fn new(predecessor_level: Option<usize>, predecessor_context_hash: Option<ContextHash>, diff: ContextMap) -> Self {
+    pub fn new(predecessor_level: Option<usize>, predecessor_context_hash: Option<ContextHash>, diff: ContextMap, 
+                merkle: Arc<RwLock<MerkleStorage>>) -> Self {
         ContextDiff {
             predecessor_index: ContextIndex::new(predecessor_level, predecessor_context_hash),
             diff,
+            merkle
         }
     }
 
@@ -143,7 +155,8 @@ impl ContextDiff {
         ensure_eq_context_hash!(context_hash, &self);
 
         self.diff.insert(to_key(key), Bucket::Exists(value.clone()));
-
+        let mut merkle = self.merkle.write().unwrap();
+        merkle.set(key.to_vec(), value.to_vec())?;
         Ok(())
     }
 }
@@ -193,29 +206,36 @@ impl TezedgeContext {
 
 impl ContextApi for TezedgeContext {
     fn init_from_start(&self) -> ContextDiff {
-        ContextDiff::new(None, None, Default::default())
+        ContextDiff::new(None, None, Default::default(), self.merkle.clone())
     }
 
     fn checkout(&self, context_hash: &ContextHash) -> Result<ContextDiff, ContextError> {
         // TODO: should be based just on context hash
         let level = self.level_by_context_hash(&context_hash)?;
 
+        let mut merkle = self.merkle.write().unwrap();
+        merkle.checkout(context_hash.clone())?;
+
         Ok(
             ContextDiff::new(
                 Some(level),
                 Some(context_hash.clone()),
                 Default::default(),
+                self.merkle.clone(),
             )
         )
     }
 
-    fn commit(&mut self, block_hash: &BlockHash, parent_context_hash: &Option<ContextHash>, new_context_hash: &ContextHash, context_diff: &ContextDiff) -> Result<(), ContextError> {
+    fn commit(&mut self, block_hash: &BlockHash, parent_context_hash: &Option<ContextHash>, new_context_hash: &ContextHash, context_diff: &ContextDiff, author: String, message: String, date: i64) -> Result<(), ContextError> {
         ensure_eq_context_hash!(parent_context_hash, &context_diff);
 
         // add to context
         let mut writer = self.storage.write().expect("lock poisoning");
         // TODO: push to correct index by context_hash found by block_hash
         writer.push(&context_diff.diff)?;
+
+        let mut merkle = self.merkle.write().unwrap();
+        merkle.commit(date as u64, author, message)?;
 
         // associate block and context_hash
         if let Err(e) = self.block_storage.assign_to_context(block_hash, new_context_hash) {
@@ -250,6 +270,10 @@ impl ContextApi for TezedgeContext {
     fn delete_to_diff(&self, context_hash: &Option<ContextHash>, key_prefix_to_delete: &Vec<String>, context_diff: &mut ContextDiff) -> Result<(), ContextError> {
         ensure_eq_context_hash!(context_hash, &context_diff);
 
+        let mut merkle = self.merkle.write().unwrap();
+        merkle.delete(key_prefix_to_delete.to_vec())?;
+        drop(merkle); 
+
         let context_map_diff = &mut context_diff.diff;
         
         // check in the current diff first
@@ -258,7 +282,6 @@ impl ContextApi for TezedgeContext {
             context_map_diff.insert(key_prefix_to_delete.join("/"), Bucket::Deleted);
         }
 
-        
         let context = self.get_key(&context_diff.predecessor_index, key_prefix_to_delete)?;
         if context.is_some() {
             context_map_diff.insert(key_prefix_to_delete.join("/"), Bucket::Deleted);
@@ -269,6 +292,10 @@ impl ContextApi for TezedgeContext {
 
     fn remove_recursively_to_diff(&self, context_hash: &Option<ContextHash>, key_prefix_to_remove: &Vec<String>, context_diff: &mut ContextDiff) -> Result<(), ContextError> {
         ensure_eq_context_hash!(context_hash, &context_diff);
+
+        let mut merkle = self.merkle.write().unwrap();
+        merkle.delete(key_prefix_to_remove.to_vec())?;
+        drop(merkle); 
 
         // at first remove keys from temp diff
         let context_map_diff = &mut context_diff.diff;
@@ -314,6 +341,9 @@ impl ContextApi for TezedgeContext {
 
     fn copy_to_diff(&self, context_hash: &Option<ContextHash>, from_key: &Vec<String>, to_key: &Vec<String>, context_diff: &mut ContextDiff) -> Result<(), ContextError> {
         ensure_eq_context_hash!(context_hash, &context_diff);
+
+        let mut merkle = self.merkle.write().unwrap();
+        merkle.copy(from_key.to_vec(), to_key.to_vec())?;
 
         // get keys from actual/parent context
         let mut final_context_to_copy = self.get_by_key_prefix(&context_diff.predecessor_index, from_key)?.unwrap_or_default();
@@ -382,6 +412,21 @@ impl ContextApi for TezedgeContext {
             return Ok(None);
         }
 
+        //TODO we should return None if merkle doesnt have the key
+
+        let merkle = self.merkle.write().unwrap();
+
+        let merkle_value = match context_index.context_hash.as_ref() {
+            Some(x) => merkle.get_history(x, key),
+            None    => {
+                // get hash by level
+                let bhwithhash = self.block_storage.get_by_block_level(context_index.level.unwrap() as i32);
+                let hash = bhwithhash.unwrap().unwrap();
+                let ctx_hash = hash.header.context();
+                merkle.get_history(ctx_hash, key)
+            }
+        };
+
         // TODO: should be based just on context hash
         let level = if let Some(context_index_level) = context_index.level {
             context_index_level
@@ -390,6 +435,32 @@ impl ContextApi for TezedgeContext {
         };
 
         let list = self.storage.read().expect("lock poisoning");
+        let rv = list.get_key(level, &to_key(key));
+        if rv.is_ok() {
+            let rvv = rv.unwrap();
+            if rvv.is_some() {
+                match rvv.unwrap() {
+                    Bucket::Deleted => {
+                        if merkle_value.is_ok() {
+                            panic!("Skiplist deleted key but merkle still has it");
+                        }
+                    }
+                    Bucket::Exists(data) => { 
+                        if merkle_value.is_ok() {
+                            let val = merkle_value.unwrap();
+                            assert_eq!(val, data);
+                            return Ok(Some(Bucket::Exists(val)));
+                        } else {
+                            panic!("{:?}", merkle_value.unwrap_err());
+                        }
+                    }
+                };
+            } else {
+                if merkle_value.is_ok() {
+                    panic!("Skiplist doesn't have key but merkle still has it");
+                }
+            }
+        }
         list
             .get_key(level, &to_key(key))
             .map_err(|se| ContextError::ContextReadError { error: se })

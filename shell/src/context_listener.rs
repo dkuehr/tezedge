@@ -184,8 +184,10 @@ fn listen_protocol_events(
                         if !ignored {
                             context.remove_recursively_to_diff(context_hash, key, &mut context_diff)?;
                         }
-                    ContextAction::Commit { parent_context_hash, new_context_hash, block_hash: Some(block_hash), .. } =>
-                        context.commit(block_hash, parent_context_hash, new_context_hash, &context_diff)?,
+                    ContextAction::Commit { parent_context_hash, new_context_hash, block_hash: Some(block_hash), 
+                                            author, message, date, ..} =>
+                        context.commit(block_hash, parent_context_hash, new_context_hash, &context_diff,
+                                        author.to_string(), message.to_string(), *date)?,
                     ContextAction::Checkout { context_hash, .. } => {
                         event_count = 0;
                         context_diff = context.checkout(context_hash)?;
