@@ -505,6 +505,13 @@ impl MerkleStorage {
     fn key_to_string(&self, key: &ContextKey) -> String {
         key.clone().join("/")
     }
+
+    pub fn get_last_commit_hash(&self) -> Option<EntryHash> {
+        match &self.last_commit {
+            Some(c) => Some(self.hash_commit(&c)),
+            None    => None
+        }
+    }
 }
 
 #[cfg(test)]
