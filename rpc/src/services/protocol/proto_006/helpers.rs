@@ -133,13 +133,13 @@ impl RightsContextData {
             cycle_from_level(requested_level, blocks_per_cycle)?
         };
 
-        // get context list of block_id level as ContextMap
-        let context_index = ContextIndex::new(Some(block_level.try_into()?), None);
+        // get context_hash from level
+        let ctx_hash = context.level_to_hash(block_level);
 
         // get index of roll snapshot
         let roll_snapshot: i16 = {
             let snapshot_key = format!("data/cycle/{}/roll_snapshot", requested_cycle);
-            if let Some(Bucket::Exists(data)) = context.get_key(&context_index, &vec![snapshot_key])? {
+            if let Some(data) = context.get_key_from_history(&ctx_hash, &vec![snapshot_key])? {
                 num_from_slice!(data, 0, i16)
             } else { // key not found - prepare error for later processing
                 return Err(format_err!("roll_snapshot"));
@@ -148,7 +148,7 @@ impl RightsContextData {
 
         let random_seed_key = format!("data/cycle/{}/random_seed", requested_cycle);
         let random_seed = {
-            if let Some(Bucket::Exists(data)) = context.get_key(&context_index, &vec![random_seed_key])? {
+            if let Some(data) = context.get_key_from_history(&ctx_hash, &vec![random_seed_key])? {
                 data
             } else { // key not found - prepare error for later processing
                 return Err(format_err!("random_seed"));
@@ -158,7 +158,7 @@ impl RightsContextData {
         // Snapshots of last_roll are listed from 0 same as roll_snapshot.
         let last_roll_key = format!("data/cycle/{}/last_roll/{}", requested_cycle, roll_snapshot);
         let last_roll = {
-            if let Some(Bucket::Exists(data)) = context.get_key(&context_index, &vec![last_roll_key])? {
+            if let Some(data) = context.get_key_from_history(&ctx_hash, &vec![last_roll_key])? {
                 num_from_slice!(data, 0, i32)
             } else { // key not found - prepare error for later processing
                 return Err(format_err!("last_roll"));
@@ -191,9 +191,11 @@ impl RightsContextData {
         //     // .filter(|(k, _)| k.contains(&format!("data/rolls/owner/snapshot/{}/{}", cycle, snapshot)))
         //     .filter(|(k, _)| k.contains(&"data/rolls/owner/current"))  // TODO use line above after context db will contain all copied snapshots in block_id level of context list
         //     .collect();
-        let context_index = ContextIndex::new(Some(requested_level), None);
+        //
+        // get context_hash from level
+        let ctx_hash = context.level_to_hash(requested_level);
 
-        let rolls = if let Some(val) = context.get_by_key_prefix(&context_index, &vec!["data/rolls/owner/snapshot".to_string(), cycle.to_string(), snapshot.to_string()])? {
+        let rolls = if let Some(val) = context.get_key_values_by_prefix(&ctx_hash, &vec!["data/rolls/owner/snapshot".to_string(), cycle.to_string(), snapshot.to_string()])? {
             val
         } else {
             bail!("No rolls found in context")
