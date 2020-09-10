@@ -222,7 +222,7 @@ pub(crate) fn get_cycle_length_for_block(block_id: &str, list: ContextList, stor
 }
 
 pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<HashMap<String, Cycle>>, failure::Error> {
-    let ctxt_level: usize = level.parse().unwrap();
+    let ctxt_level: i32 = level.parse()?;
 
     // let context_data = {
     //     let reader = list.read().expect("mutex poisoning");
@@ -233,19 +233,10 @@ pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_
     //     }
     // };
 
-    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone(),
-        persistent_storage.merkle());
-    let context_index = ContextIndex::new(Some(ctxt_level.try_into()?), None);
-    let context_data = context.get_by_key_prefix(&context_index, &vec!["data/cycle/".to_string()])?;
+    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), persistent_storage.merkle());
+    let ctx_hash = context.level_to_hash(ctxt_level)?;
+    let context_data = context.get_key_values_by_prefix(&ctx_hash, &vec!["data/cycle/".to_string()])?;
 
-    // get cylce list from context storage
-    // let cycle_lists: HashMap<String, Bucket<Vec<u8>>> = context_data.clone().into_iter()
-    //     .filter(|(k, _)| k.contains("cycle"))
-    //     .filter(|(_, v)| match v {
-    //         Bucket::Exists(_) => true,
-    //         _ => false
-    //     })
-    //     .collect();
     let cycle_lists = if let Some(ctx) = context_data {
         ctx
     } else {
@@ -256,16 +247,10 @@ pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_
     let mut cycles: HashMap<String, Cycle> = HashMap::new();
 
     // process every key value pair
-    for (key, bucket) in cycle_lists.iter() {
-
-        // create vector from path
-        let path: Vec<&str> = key.split('/').collect();
+    for (path, value) in cycle_lists.iter() {
 
         // convert value from bytes to hex
-        let value = match bucket {
-            Bucket::Exists(value) => hex::encode(value).to_string(),
-            _ => continue
-        };
+        let value = hex::encode(value).to_string();
 
         // create new cycle
         // TODO: !!! check path and move to match
@@ -277,6 +262,7 @@ pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_
         });
 
         // process cycle key value pairs
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
         match path.as_slice() {
             ["data", "cycle", cycle, "random_seed"] => {
                 cycles.entry(cycle.to_string()).and_modify(|cycle| {
@@ -318,20 +304,19 @@ pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_
 }
 
 pub(crate) fn get_cycle_from_context_as_json(level: &str, cycle_id: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<CycleJson>, failure::Error> {
-    let level: usize = level.parse()?;
+    let level: i32 = level.parse()?;
 
-    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone(),
-        persistent_storage.merkle());
-    let context_index = ContextIndex::new(Some(level.try_into()?), None);
+    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), persistent_storage.merkle());
 
-    let random_seed = context.get_key(&context_index, &vec![format!("data/cycle/{}/random_seed", &cycle_id)])?; // list.get_key(level, &format!("data/cycle/{}/random_seed", &cycle_id));
-    let roll_snapshot = context.get_key(&context_index, &vec![format!("data/cycle/{}/roll_snapshot", &cycle_id)])?;
+    let ctx_hash = context.level_to_hash(level)?;
+    let random_seed = context.get_key_from_history(&ctx_hash, &vec![format!("data/cycle/{}/random_seed", &cycle_id)])?;
+    let roll_snapshot = context.get_key_from_history(&ctx_hash, &vec![format!("data/cycle/{}/roll_snapshot", &cycle_id)])?;
 
     match (random_seed, roll_snapshot) {
         (Some(random_seed), Some(roll_snapshot)) => {
             let cycle_json = CycleJson {
-                random_seed: if let Bucket::Exists(value) = random_seed { Some(hex::encode(value).to_string()) } else { None },
-                roll_snapshot: if let Bucket::Exists(value) = roll_snapshot { Some(num_from_slice!(value, 0, i16)) } else { None },
+                random_seed: Some(hex::encode(random_seed).to_string()),
+                roll_snapshot: Some(num_from_slice!(roll_snapshot, 0, i16)),
             };
             Ok(Some(cycle_json))
         }
@@ -340,12 +325,11 @@ pub(crate) fn get_cycle_from_context_as_json(level: &str, cycle_id: &str, list: 
 }
 
 pub(crate) fn get_rolls_owner_current_from_context(level: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<HashMap<String, HashMap<String, HashMap<String, String>>>>, failure::Error> {
-    let ctxt_level: usize = level.parse().unwrap();
+    let ctxt_level: i32 = level.parse()?;
 
-    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), list.clone(),
-        persistent_storage.merkle());
-    let context_index = ContextIndex::new(Some(ctxt_level.try_into()?), None);
-    let context_data = context.get_by_key_prefix(&context_index, &vec!["data/rolls/owner/current/".to_string()])?;
+    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), persistent_storage.merkle());
+    let ctx_hash = context.level_to_hash(ctxt_level)?;
+    let context_data = context.get_key_values_by_prefix(&ctx_hash, &vec!["data/rolls/owner/current/".to_string()])?;
 
     // create rolls list
     let mut rolls: HashMap<String, HashMap<String, HashMap<String, String>>> = HashMap::new();
@@ -356,18 +340,13 @@ pub(crate) fn get_rolls_owner_current_from_context(level: &str, list: ContextLis
         bail!("Error getting context data")
     };
     // process every key value pair
-    for (key, bucket) in rolls_lists.iter() {
-
-        // create vector from path
-        let path: Vec<&str> = key.split('/').collect();
+    for (path, value) in rolls_lists.iter() {
 
         // convert value from bytes to hex
-        let value = match bucket {
-            Bucket::Exists(value) => hex::encode(value).to_string(),
-            _ => continue
-        };
+        let value = hex::encode(value).to_string();
 
         // process roll key value pairs
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
         match path.as_slice() {
             ["data", "rolls", "owner", "current", path1, path2, path3 ] => {
                 rolls.entry(path1.to_string())
