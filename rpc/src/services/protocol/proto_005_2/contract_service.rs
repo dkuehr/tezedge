@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::string::ToString;
+use std::convert::TryInto;
 
 use failure::bail;
 
@@ -19,7 +20,7 @@ pub(crate) fn get_contract_counter(context_proto_params: ContextProtocolParam, p
     let level = context_proto_params.level;
 
     // get context_hash from level
-    let ctx_hash = context.level_to_hash(level);
+    let ctx_hash = context.level_to_hash(level.try_into()?)?;
     
     let indexed_contract_key = construct_indexed_contract_key(pkh)?;
 
@@ -44,7 +45,7 @@ pub(crate) fn get_contract_manager_key(context_proto_params: ContextProtocolPara
     let level = context_proto_params.level;
 
     // get context_hash from level
-    let ctx_hash = context.level_to_hash(level);
+    let ctx_hash = context.level_to_hash(level.try_into()?)?;
     
     let indexed_contract_key = construct_indexed_contract_key(pkh)?;
 
