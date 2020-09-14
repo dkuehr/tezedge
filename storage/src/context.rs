@@ -121,7 +121,12 @@ impl ContextApi for TezedgeContext {
 
     fn get_key_from_history(&self, context_hash: &ContextHash, key: &Vec<String>) -> Result<Option<Vec<u8>>, ContextError> {
         let merkle = self.merkle.read().expect("lock poisoning");
-        match merkle.get_history(context_hash, key) {
+        // clients may pass in a prefix with elements containing slashes (expecting us to split)
+        // we need to join with '/' and split again
+        // TODO IMPORTANT: check if it's necessary to do the same thing in all other context methods
+        let key = to_key(key).split('/').map(|s| s.to_string()).collect();
+
+        match merkle.get_history(context_hash, &key) {
             Err(MerkleError::ValueNotFound{key: _}) => Ok(None),
             Err(MerkleError::EntryNotFound) =>  {
                 Err(ContextError::UnknownContextHashError { context_hash: hex::encode(context_hash).to_string() })
