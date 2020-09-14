@@ -3,6 +3,7 @@
 
 use std::sync::{Arc, RwLock};
 use std::convert::TryInto;
+use std::num::TryFromIntError;
 
 use failure::Fail;
 
@@ -119,7 +120,7 @@ impl ContextApi for TezedgeContext {
     }
 
     fn get_key_from_history(&self, context_hash: &ContextHash, key: &Vec<String>) -> Result<Option<Vec<u8>>, ContextError> {
-        let mut merkle = self.merkle.write().expect("lock poisoning");
+        let merkle = self.merkle.read().expect("lock poisoning");
         match merkle.get_history(context_hash, key) {
             Err(MerkleError::ValueNotFound{key: _}) => Ok(None),
             Err(MerkleError::EntryNotFound) =>  {
@@ -133,7 +134,7 @@ impl ContextApi for TezedgeContext {
     }
 
     fn get_key_values_by_prefix(&self, context_hash: &ContextHash, prefix: &ContextKey) -> Result<Option<Vec<(ContextKey, ContextValue)>>, MerkleError> {
-        let mut merkle = self.merkle.write().expect("lock poisoning");
+        let merkle = self.merkle.read().expect("lock poisoning");
         // clients may pass in a prefix with elements containing slashes (expecting us to split)
         // we need to join with '/' and split again
         // TODO IMPORTANT: check if it's necessary to do the same thing in all other context methods
@@ -187,10 +188,12 @@ pub enum ContextError {
     },
     #[fail(display = "Failed operation on Merkle storage: {}", error)]
     MerkleStorageError {
-        error: MerkleError
+        error: MerkleError,
     },
-    #[fail(display = "Invalid commit date")]
-    InvalidCommitDate,
+    #[fail(display = "Invalid commit date: {}", error)]
+    InvalidCommitDate {
+        error: TryFromIntError,
+    },
 }
 
 impl From<MerkleError> for ContextError {
@@ -198,8 +201,8 @@ impl From<MerkleError> for ContextError {
         ContextError::MerkleStorageError { error }
     }
 }
-impl From<std::num::TryFromIntError> for ContextError {
-    fn from(error: std::num::TryFromIntError) -> Self {
-        ContextError::InvalidCommitDate
+impl From<TryFromIntError> for ContextError {
+    fn from(error: TryFromIntError) -> Self {
+        ContextError::InvalidCommitDate { error }
     }
 }

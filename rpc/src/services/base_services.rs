@@ -16,7 +16,6 @@ use storage::block_storage::BlockJsonData;
 use storage::context::{ContextApi, TezedgeContext};
 use storage::context_action_storage::{ContextActionFilters, ContextActionJson, contract_id_to_contract_address_for_index};
 use storage::persistent::{ContextMap, PersistentStorage};
-use storage::skip_list::Bucket;
 use tezos_context::channel::ContextAction;
 use tezos_messages::p2p::encoding::version::NetworkVersion;
 use tezos_messages::protocol::{RpcJsonMap, UniversalValue};
@@ -221,7 +220,7 @@ pub(crate) fn get_cycle_length_for_block(block_id: &str, list: ContextList, stor
     }
 }
 
-pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<HashMap<String, Cycle>>, failure::Error> {
+pub(crate) fn get_cycle_from_context(level: &str, persistent_storage: &PersistentStorage) -> Result<Option<HashMap<String, Cycle>>, failure::Error> {
     let ctxt_level: i32 = level.parse()?;
 
     // let context_data = {
@@ -303,7 +302,7 @@ pub(crate) fn get_cycle_from_context(level: &str, list: ContextList, persistent_
     Ok(Some(cycles))
 }
 
-pub(crate) fn get_cycle_from_context_as_json(level: &str, cycle_id: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<CycleJson>, failure::Error> {
+pub(crate) fn get_cycle_from_context_as_json(level: &str, cycle_id: &str, persistent_storage: &PersistentStorage) -> Result<Option<CycleJson>, failure::Error> {
     let level: i32 = level.parse()?;
 
     let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), persistent_storage.merkle());
@@ -324,7 +323,7 @@ pub(crate) fn get_cycle_from_context_as_json(level: &str, cycle_id: &str, list: 
     }
 }
 
-pub(crate) fn get_rolls_owner_current_from_context(level: &str, list: ContextList, persistent_storage: &PersistentStorage) -> Result<Option<HashMap<String, HashMap<String, HashMap<String, String>>>>, failure::Error> {
+pub(crate) fn get_rolls_owner_current_from_context(level: &str, persistent_storage: &PersistentStorage) -> Result<Option<HashMap<String, HashMap<String, HashMap<String, String>>>>, failure::Error> {
     let ctxt_level: i32 = level.parse()?;
 
     let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), persistent_storage.merkle());
