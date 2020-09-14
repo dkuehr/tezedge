@@ -188,13 +188,11 @@ pub(crate) fn get_block_shell_header(block_id: &str, persistent_storage: &Persis
 pub(crate) fn get_context_constants_just_for_rpc(
     block_id: &str,
     opt_level: Option<i64>,
-    list: ContextList,
     persistent_storage: &PersistentStorage,
     state: &RpcCollectedStateRef) -> Result<Option<RpcJsonMap>, failure::Error> {
     let context_proto_params = get_context_protocol_params(
         block_id,
         opt_level,
-        list,
         persistent_storage,
         state,
     )?;
@@ -202,8 +200,8 @@ pub(crate) fn get_context_constants_just_for_rpc(
     Ok(tezos_messages::protocol::get_constants_for_rpc(&context_proto_params.constants_data, context_proto_params.protocol_hash)?)
 }
 
-pub(crate) fn get_cycle_length_for_block(block_id: &str, list: ContextList, storage: &PersistentStorage, state: &RpcCollectedStateRef, log: &Logger) -> Result<i32, failure::Error> {
-    if let Ok(context_proto_params) = get_context_protocol_params(block_id, None, list, storage, state) {
+pub(crate) fn get_cycle_length_for_block(block_id: &str, storage: &PersistentStorage, state: &RpcCollectedStateRef, log: &Logger) -> Result<i32, failure::Error> {
+    if let Ok(context_proto_params) = get_context_protocol_params(block_id, None, storage, state) {
         Ok(tezos_messages::protocol::get_constants_for_rpc(&context_proto_params.constants_data, context_proto_params.protocol_hash)?
             .map(|constants| constants.get("blocks_per_cycle")
                 .map(|value| if let UniversalValue::Number(value) = value { *value } else {
