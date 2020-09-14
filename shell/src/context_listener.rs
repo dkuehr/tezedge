@@ -169,7 +169,7 @@ fn listen_protocol_events(
                 match &msg {
                     ContextAction::Set { key, value, context_hash, ignored, .. } =>
                         if !ignored {
-                            context.set(context_hash, key.to_vec(), value.to_vec())?;
+                            context.set(context_hash, key, value)?;
                         }
                     ContextAction::Copy { to_key: key, from_key, context_hash, ignored, .. } =>
                         if !ignored {

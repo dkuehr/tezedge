@@ -42,11 +42,13 @@ impl ContextApi for TezedgeContext {
         merkle.set(key.to_vec(), value.to_vec())?;
         Ok(())
     }
+
     fn checkout(&self, context_hash: &ContextHash) -> Result<(), ContextError> {
         let mut merkle = self.merkle.write().expect("lock poisoning");
         merkle.checkout(context_hash.clone())?;
         Ok(())
     }
+
     fn commit(&mut self, block_hash: &BlockHash, parent_context_hash: &Option<ContextHash>,
               new_context_hash: &ContextHash, author: String, message: String,
               date: i64) -> Result<(), ContextError> {
@@ -93,24 +95,29 @@ impl ContextApi for TezedgeContext {
         merkle.delete(key_prefix_to_delete.to_vec())?;
         Ok(())
     }
+
     fn remove_recursively_to_diff(&self, context_hash: &Option<ContextHash>, key_prefix_to_remove: &Vec<String>) -> Result<(), ContextError> {
         //TODO ensure_eq_context_hash
         let mut merkle = self.merkle.write().expect("lock poisoning");
         merkle.delete(key_prefix_to_remove.to_vec())?;
         Ok(())
     }
+
     fn copy_to_diff(&self, context_hash: &Option<ContextHash>, from_key: &Vec<String>, to_key: &Vec<String>) -> Result<(), ContextError> {
         //TODO ensure_eq_context_hash
         let mut merkle = self.merkle.write().expect("lock poisoning");
         merkle.copy(from_key.to_vec(), to_key.to_vec())?;
         Ok(())
     }
+
     fn get_key(&self, key: &Vec<String>) -> Result<Vec<u8>, ContextError> {
         let mut merkle = self.merkle.write().expect("lock poisoning");
         //TODO NOTE: get_key() tested on shadow branch used get_history() with hash converted from
         //level
-        merkle.get(key)?
+        let val = merkle.get(key)?;
+        Ok(val)
     }
+
     fn get_key_from_history(&self, context_hash: &ContextHash, key: &Vec<String>) -> Result<Option<Vec<u8>>, ContextError> {
         let mut merkle = self.merkle.write().expect("lock poisoning");
         match merkle.get_history(context_hash, key) {
@@ -119,11 +126,12 @@ impl ContextApi for TezedgeContext {
                 Err(ContextError::UnknownContextHashError { context_hash: hex::encode(context_hash).to_string() })
             },
             Err(err) => {
-                Err(ContextError::ContextReadError { error: err })
+                Err(ContextError::MerkleStorageError { error: err })
             },
             Ok(val) => Ok(Some(val))
         }
     }
+
     fn get_key_values_by_prefix(&self, context_hash: &ContextHash, prefix: &ContextKey) -> Result<Option<Vec<(ContextKey, ContextValue)>>, MerkleError> {
         let mut merkle = self.merkle.write().expect("lock poisoning");
         // clients may pass in a prefix with elements containing slashes (expecting us to split)
@@ -163,36 +171,35 @@ impl TezedgeContext {
 /// Possible errors for context
 #[derive(Debug, Fail)]
 pub enum ContextError {
-    #[fail(display = "Failed to save commit error: {}", error)]
-    CommitWriteError {
-        error: MerkleError
-    },
-    #[fail(display = "Failed to read from context error: {}", error)]
-    ContextReadError {
-        error: MerkleError
-    },
     #[fail(display = "Failed to assign context_hash: {:?} to block_hash: {}, error: {}", context_hash, block_hash, error)]
     ContextHashAssignError {
         context_hash: String,
         block_hash: String,
         error: StorageError,
     },
-    #[fail(display = "InvalidContextHash for context diff to commit, expected_context_hash: {:?}, context_hash: {:?}", expected_context_hash, context_hash)]
-    InvalidContextHashError {
-        expected_context_hash: Option<String>,
-        context_hash: Option<String>,
-    },
     #[fail(display = "Unknown context_hash: {:?}", context_hash)]
     UnknownContextHashError {
         context_hash: String,
-    },
-    #[fail(display = "Failed to read block for context_hash: {:?}, error: {}", context_hash, error)]
-    ReadBlockError {
-        context_hash: String,
-        error: MerkleError,
     },
     #[fail(display = "Unknown level: {}", level)]
     UnknownLevelError {
         level: String,
     },
+    #[fail(display = "Failed operation on Merkle storage: {}", error)]
+    MerkleStorageError {
+        error: MerkleError
+    },
+    #[fail(display = "Invalid commit date")]
+    InvalidCommitDate,
+}
+
+impl From<MerkleError> for ContextError {
+    fn from(error: MerkleError) -> Self {
+        ContextError::MerkleStorageError { error }
+    }
+}
+impl From<std::num::TryFromIntError> for ContextError {
+    fn from(error: std::num::TryFromIntError) -> Self {
+        ContextError::InvalidCommitDate
+    }
 }
