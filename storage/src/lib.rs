@@ -369,7 +369,6 @@ pub mod tests_common {
     use crate::mempool_storage::MempoolStorage;
     use crate::persistent::*;
     use crate::persistent::sequence::Sequences;
-    use crate::skip_list::{DatabaseBackedSkipList, Lane, ListValue};
 
     use super::*;
 
@@ -408,9 +407,6 @@ pub mod tests_common {
                 context_action_storage::ContextActionByTypeIndex::descriptor(),
                 SystemStorage::descriptor(),
                 Sequences::descriptor(),
-                DatabaseBackedSkipList::descriptor(),
-                Lane::descriptor(),
-                ListValue::descriptor(),
                 MempoolStorage::descriptor(),
                 ContextActionStorage::descriptor(),
                 ChainMetaStorage::descriptor(),
