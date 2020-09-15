@@ -20,6 +20,7 @@ pub trait ContextApi {
     fn delete_to_diff(&self, context_hash: &Option<ContextHash>, key_prefix_to_delete: &Vec<String>) -> Result<(), ContextError>;
     fn remove_recursively_to_diff(&self, context_hash: &Option<ContextHash>, key_prefix_to_remove: &Vec<String>) -> Result<(), ContextError>;
     fn copy_to_diff(&self, context_hash: &Option<ContextHash>, from_key: &Vec<String>, to_key: &Vec<String>) -> Result<(), ContextError>;
+    fn get_key(&self, key: &Vec<String>) -> Result<Vec<u8>, ContextError>;
 }
 
 impl ContextApi for TezedgeContext {
@@ -91,6 +92,10 @@ impl ContextApi for TezedgeContext {
         let mut merkle = self.merkle.write().unwrap();
         merkle.copy(from_key.to_vec(), to_key.to_vec());
         Ok(())
+    }
+    fn get_key(&self, key: &Vec<String>) -> Result<Vec<u8>, ContextError> {
+        let mut merkle = self.merkle.write().unwrap();
+        Ok(merkle.get(key).unwrap())
     }
 }
 
