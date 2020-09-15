@@ -185,9 +185,10 @@ impl MerkleStorage {
                 // Go through all descendants and gather errors. Remap error if there is a failure
                 // anywhere in the recursion paths. TODO: is revert possible?
                 tree.iter().map(|(key, child_node)| {
+                    let fullpath = path.clone() + "/" + key;
                     match self.get_entry(&child_node.entry_hash) {
                         Err(_) => Ok(()),
-                        Ok(entry) => self.get_key_values_from_tree_recursively(key, &entry, entries),
+                        Ok(entry) => self.get_key_values_from_tree_recursively(&fullpath, &entry, entries),
                     }
                 }).find_map(|res| {
                     match res {
@@ -215,7 +216,14 @@ impl MerkleStorage {
 
         for (key, child_node) in prefixed_tree.iter() {
             let entry = self.get_entry(&child_node.entry_hash)?;
-            self.get_key_values_from_tree_recursively(key, &entry, &mut keyvalues)?;
+            let delimiter: &str;
+            if prefix.len() == 0 {
+                delimiter = "";
+            } else {
+                delimiter = "/";
+            }
+            let fullpath = self.key_to_string(prefix) + delimiter + key;
+            self.get_key_values_from_tree_recursively(&fullpath, &entry, &mut keyvalues)?;
         }
 
         if keyvalues.is_empty() {
