@@ -44,6 +44,7 @@
 //! Reference: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
 use std::path::Path;
 use rocksdb::{DB, ColumnFamilyDescriptor, Options, IteratorMode};
+use rocksdb::perf::MemoryUsageStats;
 use crate::persistent::{default_table_options, KeyValueSchema};
 use std::hash::Hash;
 use im::OrdMap as OrdMap;
@@ -594,6 +595,14 @@ impl MerkleStorage {
             Some(c) => Some(self.hash_commit(&c)),
             None    => None
         }
+    }
+
+    pub fn get_database_stats(&self) {
+        let stats = rocksdb::perf::get_memory_usage_stats(Some(&[&self.db]), None).unwrap();
+        println!("{:?}", stats.mem_table_total);
+        println!("{:?}", stats.mem_table_unflushed);
+        println!("{:?}", stats.mem_table_readers_total);
+        println!("{:?}", stats.cache_total);
     }
 }
 

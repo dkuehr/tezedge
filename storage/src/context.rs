@@ -43,6 +43,13 @@ impl ContextApi for TezedgeContext {
         //TODO ensure_eq_context_hash
         let mut merkle = self.merkle.write().expect("lock poisoning");
         merkle.set(key.to_vec(), value.to_vec())?;
+
+        self.counter += 1;
+        if self.counter == 1 {
+            merkle.get_database_stats();
+            panic!("\tstats end");
+        }
+
         Ok(())
     }
 
@@ -57,8 +64,9 @@ impl ContextApi for TezedgeContext {
               date: i64) -> Result<(), ContextError> {
         //TODO ensure_eq_context_hash
         //date == time?
-
+        //
         let mut merkle = self.merkle.write().expect("lock poisoning");
+
         let date: u64 = date.try_into()?;
         merkle.commit(date, author, message)?;
 
@@ -157,6 +165,7 @@ impl ContextApi for TezedgeContext {
             _ => Err(ContextError::UnknownLevelError{level: level.to_string()})
         }
     }
+
     fn get_last_commit_hash(&self) -> Option<Vec<u8>> {
         let merkle = self.merkle.read().expect("lock poisoning");
         merkle.get_last_commit_hash()
@@ -172,11 +181,12 @@ pub struct TezedgeContext {
     block_storage: BlockStorage,
 //    storage: ContextList,
     merkle: Arc<RwLock<MerkleStorage>>,
+    counter: i32
 }
 
 impl TezedgeContext {
     pub fn new(block_storage: BlockStorage, merkle: Arc<RwLock<MerkleStorage>>) -> Self {
-        TezedgeContext { block_storage, merkle }
+        TezedgeContext { block_storage, merkle, counter: 0}
     }
 }
 

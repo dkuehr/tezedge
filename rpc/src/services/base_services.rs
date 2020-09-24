@@ -452,6 +452,10 @@ pub(crate) fn get_node_version(network_version: &NetworkVersion) -> Result<NodeV
     Ok(NodeVersion::new(network_version))
 }
 
+pub(crate) fn get_database_memstats() -> Result<NodeVersion, failure::Error> {
+    bail!("unimplemented")
+}
+
 pub(crate) fn get_block_by_block_id(block_id: &str, persistent_storage: &PersistentStorage, state: &RpcCollectedStateRef) -> Result<Option<FullBlockInfo>, failure::Error> {
     let block_storage = BlockStorage::new(persistent_storage);
 

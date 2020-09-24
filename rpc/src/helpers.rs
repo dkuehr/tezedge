@@ -362,6 +362,11 @@ pub struct NodeVersion {
 }
 
 #[derive(Serialize, Debug, Clone)]
+pub struct DatabaseMemStats {
+    //TODO
+}
+
+#[derive(Serialize, Debug, Clone)]
 pub struct CommitInfo {
     commit_hash: UniString,
     commit_date: UniString,
