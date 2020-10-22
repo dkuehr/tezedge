@@ -261,15 +261,6 @@ pub(crate) fn get_cycle_from_context(block_id: &str, persistent_storage: &Persis
         None => bail!("Block level not found")
     };
 
-    // let context_data = {
-    //     let reader = list.read().expect("mutex poisoning");
-    //     if let Ok(Some(c)) = reader.get(ctxt_level) {
-    //         c
-    //     } else {
-    //         bail!("Context data not found")
-    //     }
-    // };
-
     let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), persistent_storage.merkle());
     let ctx_hash = context.level_to_hash(ctxt_level)?;
     let context_data = context.get_key_values_by_prefix(&ctx_hash, &vec!["data/cycle".to_string()])?;
