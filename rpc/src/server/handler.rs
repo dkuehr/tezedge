@@ -143,6 +143,12 @@ pub async fn context_cycle(_: Request<Body>, params: Params, _: Query, env: RpcS
     result_to_json_response(base_services::get_cycle_from_context(block_id, env.persistent_storage(), env.state()), env.log())
 }
 
+pub async fn context_raw_bytes(_: Request<Body>, params: Params, _: Query, env: RpcServiceEnvironment) -> ServiceResult {
+    let block_id = params.get_str("block_id").unwrap();
+    let prefix = params.get_str("any");
+    result_option_to_json_response(base_services::get_context_raw_bytes(block_id, prefix, env.persistent_storage(), env.state(), env.log()), env.log())
+}
+
 pub async fn rolls_owner_current(_: Request<Body>, params: Params, _: Query, env: RpcServiceEnvironment) -> ServiceResult {
     let block_id = params.get_str("block_id").unwrap();
     result_to_json_response(base_services::get_rolls_owner_current_from_context(block_id, env.persistent_storage(), env.state()), env.log())

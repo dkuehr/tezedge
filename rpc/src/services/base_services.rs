@@ -16,7 +16,7 @@ use storage::block_storage::BlockJsonData;
 use storage::context::{ContextApi, TezedgeContext};
 use storage::context_action_storage::{ContextActionFilters, ContextActionJson, contract_id_to_contract_address_for_index};
 use storage::persistent::PersistentStorage;
-use storage::merkle_storage::MerkleStorageStats;
+use storage::merkle_storage::{MerkleStorageStats, StringTree};
 use tezos_context::channel::ContextAction;
 use tezos_messages::p2p::encoding::version::NetworkVersion;
 use tezos_messages::protocol::{RpcJsonMap, UniversalValue};
@@ -215,6 +215,40 @@ pub(crate) fn get_cycle_length_for_block(block_id: &str, storage: &PersistentSto
     } else {
         slog::warn!(log, "Cycle length missing"; "block" => block_id);
         Ok(4096)
+    }
+}
+
+pub(crate) fn get_context_raw_bytes(block_id: &str, prefix: Option<&str>, persistent_storage: &PersistentStorage, state: &RpcCollectedStateRef, log: &Logger) -> Result<Option<StringTree>, failure::Error> {
+    if !(cfg!(debug_assertions)) {
+        return Ok(None); // this RPC is only for debug mode
+    }
+
+    // TODO: should be replaced by context_hash
+    // get block level first
+    let ctxt_level: i32 = match get_level_by_block_id(block_id, persistent_storage, state) {
+        Ok(Some(val)) => {
+            let rv = val.try_into();
+            if rv.is_err() {
+                slog::warn!(log, "Block level not found");
+                return Ok(None);
+            }
+            rv.unwrap()
+        }
+        _ => {
+            slog::warn!(log, "Block level not found");
+            return Ok(None);
+        }
+    };
+
+    let context = TezedgeContext::new(BlockStorage::new(&persistent_storage), persistent_storage.merkle());
+    let ctx_hash = context.level_to_hash(ctxt_level);
+    if ctx_hash.is_err() {
+        slog::warn!(log, "Block level not found");
+        return Ok(None);
+    }
+    match context.get_context_tree_by_prefix(&ctx_hash.unwrap(), &prefix) {
+        Ok(tree) => Ok(Some(tree)),
+        Err(_) => Ok(None), // return None to avoid a panic
     }
 }
 
