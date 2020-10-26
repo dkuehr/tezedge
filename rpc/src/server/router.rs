@@ -71,6 +71,9 @@ pub(crate) fn create_routes(is_sandbox: bool) -> PathTree<Handler> {
     routes.handle("/stats/database_mem", dev_handler::database_memstats);
     //routes.handle("/stats/storage", dev_handler::dev_stats_storage);
 
+    // DEPRECATED in ocaml but still used by python tests
+    routes.handle("/network/version", handler::node_version);
+    
     routes
 }
 
@@ -86,6 +89,9 @@ impl<T, F> Routes<T> for PathTree<Handler>
     fn handle(&mut self, path: &str, f: T) {
         self.insert(path, Arc::new(move |req, params, query, env| {
             Box::new(f(req, params, query, env))
+        }));
+        self.insert(&format!("/describe{}", path), Arc::new(move |req, params, query, env| {
+            Box::new(handler::describe(req, params, query, env))
         }));
     }
 }
