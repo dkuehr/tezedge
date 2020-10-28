@@ -31,6 +31,7 @@ pub(crate) fn create_routes(is_sandbox: bool) -> PathTree<Handler> {
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/hash", handler::get_block_hash);
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/operation_hashes", handler::get_block_operation_hashes);
     routes.handle(Method::POST, "/injection/operation", handler::inject_operation);
+    routes.handle(Method::GET, "/workers/prevalidators", handler::worker_prevalidators);
 
     // TODO: TE-226 - implement correctly or just remove, it will be part of protocol router
     // there should be just two endpoints: context/raw/json (from protocol), context/raw/bytes (shell rpc)

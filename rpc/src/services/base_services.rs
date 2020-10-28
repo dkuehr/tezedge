@@ -1,12 +1,14 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use riker::actors::BasicActorRef;
 use std::collections::HashMap;
 use std::convert::TryInto;
 
 use failure::bail;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
+use riker::actor::ActorReference;
 
 use crypto::hash::{chain_id_to_b58_string, HashType};
 use shell::shell_channel::BlockApplied;
@@ -23,6 +25,7 @@ use tezos_messages::protocol::{RpcJsonMap, UniversalValue};
 
 use crate::helpers::{BlockHeaderInfo, BlockHeaderShellInfo, FullBlockInfo, get_action_types, get_block_hash_by_block_id, get_context_protocol_params, get_level_by_block_id, MonitorHeadStream, NodeVersion, PagedResult, Protocols};
 use crate::rpc_actor::RpcCollectedStateRef;
+use crate::server::RpcServiceEnvironment;
 
 // Serialize, Deserialize,
 #[derive(Serialize, Deserialize, Debug)]
@@ -173,6 +176,27 @@ pub(crate) fn get_block_shell_header(block_id: &str, persistent_storage: &Persis
     let block = block_storage.get_with_json_data(&block_hash)?.map(|(header, json_data)| map_header_and_json_to_block_header_info(header, json_data, state).to_shell_header());
 
     Ok(block)
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct Prevalidators {
+    chain_id: String,
+    since: String,
+}
+
+// TODO: implement the json structure form ocaml's RPC 
+pub(crate) fn get_prevalidators(env: &RpcServiceEnvironment) -> Result<Vec<Prevalidators>, failure::Error> {
+    let chain_id = get_chain_id(env.state()).unwrap_or("".to_string());
+    
+    if env.sys().user_root().children().filter(|actor_ref| actor_ref.name() == "mempool-prevalidator").collect::<Vec<BasicActorRef>>().is_empty() {
+        Ok(vec![])
+    } else {
+        Ok(vec![Prevalidators {
+            chain_id,
+            since: env.sys().start_date().to_rfc3339(),
+        }])
+    }
+
 }
 
 /// Get protocol context constants from context list

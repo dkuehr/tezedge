@@ -480,6 +480,13 @@ pub async fn describe(method: Method, req: Request<Body>, _: Params, _: Query, e
     )
 }
 
+pub async fn worker_prevalidators(_: Request<Body>, _: Params, _: Query, env: RpcServiceEnvironment) -> ServiceResult {
+    result_to_json_response(
+        base_services::get_prevalidators(&env),
+        env.log(),
+    )
+}
+
 async fn create_ffi_json_request(req: Request<Body>) -> Result<JsonRpcRequest, failure::Error> {
     let context_path = req.uri().path_and_query().unwrap().as_str().to_string();
     let body = hyper::body::to_bytes(req.into_body()).await?;
