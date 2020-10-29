@@ -55,7 +55,7 @@ pub(crate) fn get_contract_manager_key(context_proto_params: ContextProtocolPara
             Ok(pk) => {
                 Ok(Some(pk.to_string()))
             }
-            Err(_) => bail!("Manager key not revealed yet")
+            Err(_) => Ok(None)
         }
         
     } else {
