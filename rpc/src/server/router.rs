@@ -54,6 +54,7 @@ pub(crate) fn create_routes(is_sandbox: bool) -> PathTree<Handler> {
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/context/contracts/:pkh", handler::context_contract);
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/context/contracts/:pkh/counter", handler::get_contract_counter);
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/context/contracts/:pkh/manager_key", handler::get_contract_manager_key);
+    routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/context/contracts/:pkh/balance", handler::get_contract_balance);
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/helpers/baking_rights", handler::baking_rights);
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/helpers/endorsing_rights", handler::endorsing_rights);
     routes.handle(Method::GET, "/chains/:chain_id/blocks/:block_id/votes/listings", handler::votes_listings);
