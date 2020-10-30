@@ -69,7 +69,6 @@ pub(crate) fn create_routes(is_sandbox: bool) -> PathTree<Handler> {
     routes.handle(Method::GET, "/dev/chains/main/blocks", dev_handler::dev_blocks);
     routes.handle(Method::GET, "/dev/chains/main/actions/blocks/:block_hash", dev_handler::dev_action_cursor);
     routes.handle(Method::GET, "/dev/chains/main/actions/contracts/:contract_address", dev_handler::dev_action_cursor);
-    routes.handle(Method::GET, "/dev/context/:id", dev_handler::dev_context);
     routes.handle(Method::GET, "/stats/memory", dev_handler::dev_stats_memory);
     routes.handle(Method::GET, "/stats/database_mem", dev_handler::database_memstats);
     //routes.handle(Method::GET, "/stats/storage", dev_handler::dev_stats_storage);
