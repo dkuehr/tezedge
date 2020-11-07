@@ -13,3 +13,4 @@ pub mod ser;
 pub mod binary_reader;
 pub mod binary_writer;
 pub mod json_writer;
+pub mod de_nom;

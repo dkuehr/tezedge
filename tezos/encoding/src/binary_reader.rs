@@ -32,6 +32,9 @@ pub enum BinaryReaderError {
     DeserializationError {
         error: crate::de::Error
     },
+    /// Generic nom deserialization error.
+    #[fail(display = "Message nom de-serialization error")]
+    NomDeserializationError,
     /// No tag with the corresponding id was found. This might not be an error of the binary data but
     /// may simply mean that we have not yet defined tag in encoding.
     #[fail(display = "No tag found for id: 0x{:X}", tag)]
