@@ -13,6 +13,8 @@ use tezos_encoding::has_encoding;
 use crate::cached_data;
 use crate::p2p::binary_message::cache::BinaryDataCache;
 
+use tezos_encoding::de_nom::{NomInput, NomResult, NomDeserialize, common::*};
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Getters, Clone)]
 pub struct OperationMessage {
     #[get = "pub"]
@@ -62,6 +64,10 @@ impl Operation {
     pub fn data(&self) -> &Vec<u8> {
         &self.data
     }
+
+    fn new(branch: BlockHash, data: Vec<u8>) -> Self {
+        Operation{branch, data, body: Default::default()}
+    }
 }
 
 impl From<DecodedOperation> for Operation {
@@ -86,6 +92,18 @@ has_encoding!(Operation, OPERATION_ENCODING, {
             )))
         ])
 });
+
+impl NomDeserialize for Operation {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        map(
+            tuple((
+                nom_hash(HashType::BlockHash),
+                map(take_till(|_| false), Vec::from)
+            )),
+            |(branch, data)| Operation::new(branch, data)
+        )(i)
+    }
+}
 
 // -----------------------------------------------------------------------------------------------
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

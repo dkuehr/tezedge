@@ -15,6 +15,8 @@ use crate::cached_data;
 use crate::p2p::binary_message::cache::BinaryDataCache;
 use crate::p2p::encoding::operation::Operation;
 
+use tezos_encoding::de_nom::{NomInput, NomResult, NomDeserialize, common::*};
+
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, CopyGetters, Getters)]
 pub struct OperationsForBlock {
     #[get = "pub"]
@@ -49,6 +51,18 @@ has_encoding!(OperationsForBlock, OPERATIONS_FOR_BLOCK_ENCODING, {
         ])
 });
 
+impl NomDeserialize for OperationsForBlock {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        map(
+            tuple((
+                nom_hash(HashType::BlockHash),
+                i8
+            )),
+            |(hash, validation_pass)| OperationsForBlock::new(hash, validation_pass)
+        )(i)
+    }
+}
+
 // -----------------------------------------------------------------------------------------------
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Getters)]
 pub struct OperationsForBlocksMessage {
@@ -82,6 +96,19 @@ has_encoding!(OperationsForBlocksMessage, OPERATIONS_FOR_BLOCKS_MESSAGE_ENCODING
         ])
 });
 
+impl NomDeserialize for OperationsForBlocksMessage {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        map(
+            tuple((
+                OperationsForBlock::nom_parse,
+                Path::nom_parse,
+                nom_list(nom_dynamic(Operation::nom_parse))
+            )),
+            |(ofb, ohp, ops)| OperationsForBlocksMessage::new(ofb, ohp, ops)
+        )(i)
+    }
+}
+
 impl From<OperationsForBlocksMessage> for Vec<Operation> {
     fn from(msg: OperationsForBlocksMessage) -> Self {
         msg.operations
@@ -106,6 +133,18 @@ has_encoding!(PathRight, PATH_RIGHT_ENCODING, {
             Field::new("path", path_encoding()),
         ])
 });
+
+impl NomDeserialize for PathRight {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        map(
+            tuple((
+                nom_hash(HashType::OperationListListHash),
+                Path::nom_parse,
+            )),
+            |(left, path)| PathRight::new(left, path, Default::default())
+        )(i)
+    }
+}
 
 impl PathRight {
     pub fn new(left: Hash, path: Path, body: BinaryDataCache) -> Self {
@@ -132,6 +171,18 @@ has_encoding!(PathLeft, PATH_LEFT_ENCODING, {
         ])
 });
 
+impl NomDeserialize for PathLeft {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        map(
+            tuple((
+                Path::nom_parse,
+                nom_hash(HashType::OperationListListHash),
+            )),
+            |(path, right)| PathLeft::new(path, right, Default::default())
+        )(i)
+    }
+}
+
 impl PathLeft {
     pub fn new(path: Path, right: Hash, body: BinaryDataCache) -> Self {
         Self { path, right, body }
@@ -157,6 +208,17 @@ pub fn path_encoding() -> Encoding {
     )
 }
 
+impl NomDeserialize for Path {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        alt((
+            nom_tagged_enum(b"\xF0", PathLeft::nom_parse, |v| Path::Left(Box::new(v))),
+            nom_tagged_enum(b"\x0F", PathRight::nom_parse, |v| Path::Right(Box::new(v))),
+            nom_tagged_enum(b"\x00", nom_none(), |_| Path::Op),
+        ))(i)
+    }
+}
+
+
 // -----------------------------------------------------------------------------------------------
 #[derive(Serialize, Deserialize, Debug, Getters, Clone)]
 pub struct GetOperationsForBlocksMessage {
@@ -181,3 +243,11 @@ has_encoding!(GetOperationsForBlocksMessage, GET_OPERATIONS_FOR_BLOCKS_MESSAGE_E
             Field::new("get_operations_for_blocks", Encoding::dynamic(Encoding::list(OperationsForBlock::encoding().clone()))),
         ])
 });
+
+impl NomDeserialize for GetOperationsForBlocksMessage {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        map(nom_dynamic(nom_list(OperationsForBlock::nom_parse)),
+            |v| GetOperationsForBlocksMessage::new(v)
+        )(i)
+    }
+}

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use tezos_encoding::encoding::{Encoding, Field, HasEncoding, Tag, TagMap};
 use tezos_encoding::has_encoding;
+use tezos_encoding::de_nom::{NomInput,NomResult,NomDeserialize,common::*};
 
 use crate::cached_data;
 use crate::p2p::binary_message::cache::BinaryDataCache;
@@ -37,6 +38,16 @@ pub enum PeerMessage {
     OperationsForBlocks(OperationsForBlocksMessage),
 }
 
+impl NomDeserialize for PeerMessage {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        alt((
+            nom_tagged_enum(b"\x00\x60", GetOperationsForBlocksMessage::nom_parse,
+                            |v| PeerMessage::GetOperationsForBlocks(v)),
+            nom_tagged_enum(b"\x00\x61", OperationsForBlocksMessage::nom_parse,
+                            |v| PeerMessage::OperationsForBlocks(v)),
+        ))(i)
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Getters)]
 pub struct PeerMessageResponse {
@@ -44,6 +55,15 @@ pub struct PeerMessageResponse {
     messages: Vec<PeerMessage>,
     #[serde(skip_serializing)]
     body: BinaryDataCache,
+}
+
+impl NomDeserialize for PeerMessageResponse {
+    fn nom_parse(i: NomInput) -> NomResult<Self> {
+        map(
+            nom_dynamic(nom_list(PeerMessage::nom_parse)),
+            |messages| PeerMessageResponse{messages, body: BinaryDataCache::default()}
+        )(i)
+    }
 }
 
 cached_data!(PeerMessageResponse, body);
