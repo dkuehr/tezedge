@@ -5,11 +5,30 @@ use failure::Error;
 use crypto::hash::HashType;
 use tezos_messages::p2p::binary_message::BinaryMessage;
 use tezos_messages::p2p::encoding::prelude::*;
+use tezos_encoding::de_nom::NomFrom;
 
 #[test]
 fn can_deserialize_get_operations_for_blocks() -> Result<(), Error> {
     let message_bytes = hex::decode("0000008a006000000084ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa01ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa02ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa00ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa03")?;
     let messages = PeerMessageResponse::from_bytes(message_bytes)?;
+    assert_eq!(1, messages.messages().len());
+
+    let message = messages.messages().get(0).unwrap();
+    match message {
+        PeerMessage::GetOperationsForBlocks(message) => {
+            let operations = message.get_operations_for_blocks();
+            assert_eq!(4, operations.len());
+            assert_eq!("BMWmj9CTojf7AnA8ZQFWGkh1cXB6FkST8Ey5coaeHX6cVNAZqA6", HashType::BlockHash.bytes_to_string(operations[0].hash()));
+            Ok(assert_eq!(1, operations[0].validation_pass()))
+        }
+        _ => panic!("Unsupported encoding: {:?}", message)
+    }
+}
+
+#[test]
+fn can_deserialize_nom_get_operations_for_blocks() -> Result<(), Error> {
+    let message_bytes = hex::decode("0000008a006000000084ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa01ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa02ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa00ed4197d381a4d4f56be30bf7157426671276aa187bbe0bb9484974af59e069aa03")?;
+    let messages = PeerMessageResponse::nom_from_bytes(message_bytes)?;
     assert_eq!(1, messages.messages().len());
 
     let message = messages.messages().get(0).unwrap();
