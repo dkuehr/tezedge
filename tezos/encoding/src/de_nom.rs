@@ -9,7 +9,7 @@ pub type NomInput<'a> = &'a [u8];
 pub type NomResult<'a, O, E = Error<NomInput<'a>>> = IResult<NomInput<'a>, O, E>;
 
 pub trait NomDeserialize: Sized {
-    fn nom_parse<'a>(i: NomInput<'a>) -> NomResult<'a, Self>;
+    fn nom_parse(i: NomInput) -> NomResult<Self>;
 }
 
 pub trait NomFrom: Sized {
