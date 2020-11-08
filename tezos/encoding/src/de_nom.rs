@@ -34,14 +34,16 @@ pub mod common {
         number::complete::{i8, be_u32, be_u64},
         combinator::map,
         branch::alt,
-        sequence::tuple,
+        sequence::{tuple,preceded},
     };
     
     use nom::{
         bytes::complete::take,
         multi::{length_value,many0},
         combinator::{all_consuming},
-        sequence::preceded,
+
+        Err,
+        error::ErrorKind,
     };
 
     use crypto::hash::HashType;
@@ -81,5 +83,9 @@ pub mod common {
 
     pub fn nom_none<I, E: nom::error::ParseError<I>>() -> impl Fn(I) -> IResult<I, (), E> {
         |i| Ok((i, ()))
+    }
+
+    pub fn nom_fail<I, O, E: nom::error::ParseError<I>>() -> impl Fn(I) -> IResult<I, O, E> {
+        |i| Err(Err::Error(E::from_error_kind(i, ErrorKind::Tag)))
     }
 }
