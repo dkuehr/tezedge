@@ -76,7 +76,7 @@ pub mod common {
     where
         E: nom::error::ParseError<NomInput<'a>>
     {
-        map(preceded(tag(t.prefix()), take(t.size())), |v| Vec::from(v))
+        map(take(t.size()), |v| Vec::from(v))
     }
 
     pub fn nom_none<I, E: nom::error::ParseError<I>>() -> impl Fn(I) -> IResult<I, (), E> {
