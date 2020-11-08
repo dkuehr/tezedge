@@ -12,13 +12,13 @@ pub trait NomDeserialize: Sized {
     fn nom_parse<'a>(i: NomInput<'a>) -> NomResult<'a, Self>;
 }
 
-pub trait NomFrom<'a>: Sized {
-    fn nom_from_bytes(i: &'a [u8]) -> Result<Self,BinaryReaderError>;
+pub trait NomFrom: Sized {
+    fn nom_from_bytes(i: Vec<u8>) -> Result<Self,BinaryReaderError>;
 }
 
-impl<'a, T> NomFrom<'a> for T where T: NomDeserialize {
-    fn nom_from_bytes(i: &'a [u8]) -> Result<Self,BinaryReaderError> {
-        match Self::nom_parse(i).finish() {
+impl<T> NomFrom for T where T: NomDeserialize {
+    fn nom_from_bytes(i: Vec<u8>) -> Result<Self,BinaryReaderError> {
+        match Self::nom_parse(i.as_slice()).finish() {
             Ok((_, res)) => Ok(res),
             Err(_) => Err(BinaryReaderError::NomDeserializationError),
         }
