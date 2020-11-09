@@ -1,3 +1,5 @@
+//! Nom-based Deserializer
+
 use crate::binary_reader::BinaryReaderError;
 use nom::{
     IResult,
@@ -47,7 +49,8 @@ pub mod common {
     };
 
     use crypto::hash::HashType;
-    
+
+    // dynamic data deserializer
     pub fn nom_dynamic<'a, O, E, F>(f: F) -> impl FnMut(NomInput<'a>) -> NomResult<'a, O, E>
     where
         F: nom::Parser<NomInput<'a>, O, E>,
@@ -56,6 +59,7 @@ pub mod common {
         length_value(be_u32, all_consuming(f))
     }
 
+    // list deserializer
     pub fn nom_list<'a, O, E, F>(f: F) -> impl FnMut(NomInput<'a>) -> NomResult<'a, Vec<O>, E>
     where
         F: nom::Parser<NomInput<'a>, O, E>,
@@ -64,6 +68,7 @@ pub mod common {
         many0(f)
     }
 
+    // tagged enum variant deserializer
     pub fn nom_tagged_enum<I, T, O1, O2, E: nom::error::ParseError<I>, F, M>(tag_item: T, func: F, mapper: M) -> impl FnMut(I) -> IResult<I, O2, E>
     where
         F: nom::Parser<I, O1, E>,
@@ -74,6 +79,7 @@ pub mod common {
         map(preceded(tag(tag_item), func), mapper)
     }
 
+    // hash deserializer
     pub fn nom_hash<'a, E>(t: HashType) -> impl FnMut(NomInput<'a>) -> NomResult<'a, Vec<u8>, E>
     where
         E: nom::error::ParseError<NomInput<'a>>
@@ -81,10 +87,12 @@ pub mod common {
         map(take(t.size()), |v| Vec::from(v))
     }
 
+    // empty deserializer
     pub fn nom_none<I, E: nom::error::ParseError<I>>() -> impl Fn(I) -> IResult<I, (), E> {
         |i| Ok((i, ()))
     }
 
+    // deserializer that always fails
     pub fn nom_fail<I: std::fmt::Debug, O, E: nom::error::ParseError<I>>() -> impl Fn(I) -> IResult<I, O, E> {
         |i| Err(Err::Error(E::from_error_kind(i, ErrorKind::Tag)))
     }
