@@ -215,24 +215,33 @@ enum PathKind {
 }
 
 impl NomDeserialize for Path {
+    // Non-recursive parser for paths
+    //
+    // It should be possible to convert it to more functional style,
+    // but that might introduce further complexity.
     fn nom_parse(i: NomInput) -> NomResult<Self> {
+        // first, collect left path hashes for RightPath and mark occurrences of LeftPath
         let (mut i, vec) = many0(
             alt((
                 map(tag(b"\xF0"), |_| PathKind::Left),
                 preceded(tag(b"\x0F"), map(nom_hash(HashType::OperationListListHash), |h| PathKind::Right(h))),
             ))
         )(i)?;
+        // now there should be Op mark
         i = tag(b"\x00")(i)?.0;
+        // unwind paths from bottom
         let mut it = vec.into_iter().rev();
         let mut path = Path::Op;
         while let Some(pk) = it.next() {
             path = match pk {
                 PathKind::Left => {
+                    // right path hash should be the next in the stream
                     let (ni, hash) = nom_hash(HashType::OperationListListHash)(i)?;
                     i = ni;
                     Path::Left(Box::new(PathLeft::new(path, hash, Default::default())))
                 },
                 PathKind::Right(hash) =>
+                    // use stored left path hash
                     Path::Right(Box::new(PathRight::new(hash, path, Default::default()))),
             }
         }
