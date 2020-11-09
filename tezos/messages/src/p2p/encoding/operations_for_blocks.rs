@@ -220,7 +220,6 @@ impl NomDeserialize for Path {
             alt((
                 map(tag(b"\xF0"), |_| PathKind::Left),
                 preceded(tag(b"\x0F"), map(nom_hash(HashType::OperationListListHash), |h| PathKind::Right(h))),
-                preceded(tag(b"\x00"), nom_fail()),
             ))
         )(i)?;
         i = tag(b"\x00")(i)?.0;
