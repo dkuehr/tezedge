@@ -208,13 +208,36 @@ pub fn path_encoding() -> Encoding {
     )
 }
 
+#[derive(Clone)]
+enum PathKind {
+    Left,
+    Right(Hash),
+}
+
 impl NomDeserialize for Path {
     fn nom_parse(i: NomInput) -> NomResult<Self> {
-        alt((
-            nom_tagged_enum(b"\xF0", PathLeft::nom_parse, |v| Path::Left(Box::new(v))),
-            nom_tagged_enum(b"\x0F", PathRight::nom_parse, |v| Path::Right(Box::new(v))),
-            nom_tagged_enum(b"\x00", nom_none(), |_| Path::Op),
-        ))(i)
+        let (mut i, vec) = many0(
+            alt((
+                map(tag(b"\xF0"), |_| PathKind::Left),
+                preceded(tag(b"\x0F"), map(nom_hash(HashType::OperationListListHash), |h| PathKind::Right(h))),
+                preceded(tag(b"\x00"), nom_fail()),
+            ))
+        )(i)?;
+        i = tag(b"\x00")(i)?.0;
+        let mut it = vec.into_iter().rev();
+        let mut path = Path::Op;
+        while let Some(pk) = it.next() {
+            path = match pk {
+                PathKind::Left => {
+                    let (ni, hash) = nom_hash(HashType::OperationListListHash)(i)?;
+                    i = ni;
+                    Path::Left(Box::new(PathLeft::new(path, hash, Default::default())))
+                },
+                PathKind::Right(hash) =>
+                    Path::Right(Box::new(PathRight::new(hash, path, Default::default()))),
+            }
+        }
+        Ok((i, path))
     }
 }
 

@@ -32,16 +32,16 @@ pub mod common {
     pub use nom::{
         bytes::complete::{tag,take_till},
         number::complete::{i8, be_u32, be_u64},
-        combinator::map,
+        combinator::{not,map,success},
         branch::alt,
         sequence::{tuple,preceded},
+        multi::{many0,fold_many0},
     };
     
     use nom::{
         bytes::complete::take,
-        multi::{length_value,many0},
+        multi::length_value,
         combinator::{all_consuming},
-
         Err,
         error::ErrorKind,
     };
@@ -85,7 +85,7 @@ pub mod common {
         |i| Ok((i, ()))
     }
 
-    pub fn nom_fail<I, O, E: nom::error::ParseError<I>>() -> impl Fn(I) -> IResult<I, O, E> {
+    pub fn nom_fail<I: std::fmt::Debug, O, E: nom::error::ParseError<I>>() -> impl Fn(I) -> IResult<I, O, E> {
         |i| Err(Err::Error(E::from_error_kind(i, ErrorKind::Tag)))
     }
 }
