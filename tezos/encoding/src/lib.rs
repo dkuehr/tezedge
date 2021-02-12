@@ -1,3 +1,4 @@
+#![feature(map_first_last)]
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 #![forbid(unsafe_code)]
@@ -13,3 +14,4 @@ pub mod de;
 pub mod encoding;
 pub mod json_writer;
 pub mod ser;
+pub mod generator;
