@@ -1,14 +1,14 @@
 use std::ops::Range;
 use tezos_encoding::encoding::HasEncoding;
-use tezos_encoding::generator;
+use tezos_encoding::generator::*;
 use tezos_messages::p2p::encoding::advertise::*;
 use tezos_messages::p2p::binary_message::BinaryMessage;
 
-fn test_indices(_p: &generator::Path, r: Range<usize>) -> impl Iterator<Item = usize> {
-    generator::range_extended(r)
+fn test_indices(_p: &Path, r: &Constraint) -> impl Iterator<Item = usize> {
+    range_extended(r)
 }
 
-fn test_data(p: &generator::Path, _r: Range<usize>) -> impl Iterator<Item = (Vec<u8>, bool)> {
+fn test_data(p: &Path, _r: &Constraint) -> impl Iterator<Item = (Vec<u8>, bool)> {
     let path = p.as_str();
     if path.ends_with("id[0]") {
         vec![
@@ -27,7 +27,7 @@ fn test_data(p: &generator::Path, _r: Range<usize>) -> impl Iterator<Item = (Vec
 
 #[test]
 fn generated_encoding_advertise() {
-    let _it = generator::iter(AdvertiseMessage::encoding(), test_indices, test_data).for_each(
+    let _it = iter(AdvertiseMessage::encoding(), test_indices, test_data).for_each(
         |(d, v)| {
             let res = AdvertiseMessage::from_bytes(d);
             if v {
