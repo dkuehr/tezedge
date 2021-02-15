@@ -1,5 +1,5 @@
 use crate::encoding::{Encoding, Field, SchemaType::Binary};
-use std::ops::{RangeFrom, RangeInclusive};
+use std::{ops::{RangeFrom, RangeInclusive}, time::Instant};
 
 #[derive(Debug, Clone)]
 pub struct Constraint {
@@ -111,6 +111,7 @@ where
 {
     factory: F,
     iters: BTreeMap<Path, IterValue<T, I>>,
+    highest_updated: Option<usize>,
 }
 
 impl<T, F, I> IteratorContainer<T, F, I>
@@ -123,6 +124,7 @@ where
         Self {
             factory,
             iters: BTreeMap::new(),
+            highest_updated: None,
         }
     }
 
@@ -139,12 +141,17 @@ where
             return true;
         }
         while let Some((key, mut iter_value)) = self.iters.pop_last() {
+            self.highest_updated = self.highest_updated.map(|h| std::cmp::min(h, self.iters.len())).or(Some(self.iters.len()));
             if iter_value.has_next() {
                 self.iters.insert(key, iter_value);
                 return true;
             }
         }
         return false;
+    }
+
+    fn stat(&self) -> (usize, Option<usize>) {
+        (self.iters.len(), self.highest_updated)
     }
 }
 
@@ -211,6 +218,8 @@ where
     length_iters: IteratorContainer<usize, FI, II>,
     data_iters: IteratorContainer<(Vec<u8>, bool), FD, ID>,
     max: Vec<Idx>,
+    t: Instant,
+    c: usize,
 }
 
 impl<'a, FI, FD, II, ID> EncodingIter<'a, FI, FD, II, ID>
@@ -227,25 +236,30 @@ where
             length_iters: IteratorContainer::new(indices),
             data_iters: IteratorContainer::new(data),
             max: Vec::new(),
+            t: Instant::now(),
+            c: 0,
         }
     }
 
-    fn set_size(&mut self, max: Idx) {
-        self.max.push(max)
-    }
-
     fn next_bounded<R: Into<Constraint>>(&mut self, path: &Path, r: R) -> Vec<u8> {
-        let (value, valid) = self.data_iters.get(path, &r.into());
+        let r = r.into();
+        let (value, valid) = self.data_iters.get(path, &r);
         self.valid = self.valid && valid;
-        //println!("value {} in {}..{}, valid: {} value: {:?}", path.as_str(), r.start, r.end, valid, value);
+//        println!("value {} in {:?}..{:?}, valid: {} value: {:?}", path.as_str(), r.lower, r.upper, valid, value);
         value
     }
     fn next_length<R: Into<Constraint>>(&mut self, path: &Path, r: R) -> usize {
-        let r = r.into();
+        let mut r = r.into();
+        if r.upper.is_none() {
+            if !self.max.is_empty() {
+                using
+            }
+            r = Constraint::new(r.lower, self.max.last().map(|l| *l));
+        }
         let value = self.length_iters.get(path, &r);
         let valid = r.contains(&value);
         self.valid = self.valid && valid;
-        //println!("length of {} in {}..{}, valid: {} value: {}", path.as_str(), r.start, r.end, valid, value);
+//        println!("length of {} in {:?}..{:?}, valid: {} value: {}", path.as_str(), r.lower, r.upper, valid, value);
         value
     }
 
@@ -260,24 +274,25 @@ where
         }
     }
 
-    fn generate_field(&mut self, path: &Path, field: &Field) -> Option<Vec<u8>> {
-        self.generate(path.field(field.get_name().clone()), field.get_encoding())
+    fn generate_field(&mut self, path: &Path, field: &Field, len: usize) -> Option<Vec<u8>> {
+        self.generate(path.field(field.get_name().clone()), field.get_encoding(), len)
     }
 
     fn generate_element(
         &mut self,
         path: &Path,
-        index: Idx,
+        _index: Idx,
         encoding: &Encoding,
+        len: usize,
     ) -> Option<Vec<u8>> {
-        self.generate(path.index(index), encoding)
+        self.generate(path.index(0), encoding, len)
     }
 
     fn generate_length(len: Idx) -> Vec<u8> {
         (len as u32).to_be_bytes().to_vec()
     }
 
-    fn generate(&mut self, path: Path, encoding: &Encoding) -> Option<Vec<u8>> {
+    fn generate(&mut self, path: Path, encoding: &Encoding, len: usize) -> Option<Vec<u8>> {
         match encoding {
             Encoding::Int8 | Encoding::Uint8 => Some(self.next_bounded(&path, 1)),
             Encoding::Int16 | Encoding::Uint16 => Some(self.next_bounded(&path, 2)),
@@ -287,20 +302,20 @@ where
                 Some(self.next_bounded(&path, hash_type.size()))
             }
             Encoding::Obj(fields) => fields.iter().fold(Some(Vec::new()), |res, f| {
-                let fld = self.generate_field(&path, f);
+                let fld = self.generate_field(&path, f, len + res.len());
                 self.extend_checked(res, fld)
             }),
             Encoding::List(encoding) => {
                 let length = self.next_length(&path, 0..);
                 (0..length).fold(Some(Vec::new()), |res, i| {
-                    let elt = self.generate_element(&path, i, encoding);
+                    let elt = self.generate_element(&path, i, encoding, len + res.len());
                     self.extend_checked(res, elt)
                 })
             }
             Encoding::BoundedList(max, encoding) => {
                 let length = self.next_length(&path, 0..=*max);
                 (0..length).fold(Some(Vec::new()), |res, i| {
-                    let elt = self.generate_element(&path, i, encoding);
+                    let elt = self.generate_element(&path, i, encoding, len + res.len());
                     self.extend_checked(res, elt)
                 })
             }
@@ -311,7 +326,7 @@ where
                 Some(vec)
             }
             Encoding::Dynamic(encoding) => {
-                self.generate(path, encoding).map(|res| {
+                self.generate(path, encoding, len).map(|res| {
                     let mut r = Self::generate_length(res.len());
                     r.extend(res);
                     r
@@ -319,11 +334,11 @@ where
             }
             Encoding::Bounded(max, encoding) => {
                 self.max.push(*max);
-                let res = self.generate(path, encoding);
+                let res = self.generate(path, encoding, len);
                 self.max.pop();
                 res
             }
-            Encoding::Split(inner) => self.generate(path, &inner(Binary)),
+            Encoding::Split(inner) => self.generate(path, &inner(Binary), len),
             _ => {
                 unimplemented!("Encoding {:?} is not implemented", encoding);
             }
@@ -341,13 +356,23 @@ where
     type Item = (Vec<u8>, bool);
 
     fn next(&mut self) -> Option<Self::Item> {
+        use std::time::*;
         while self.length_iters.has_next() || self.data_iters.has_next() {
+            if self.t.elapsed().as_secs() > 1 {
+                let ((cd, hd), (cl, hl)) = (self.data_iters.stat(), self.length_iters.stat());
+                let hd = hd.unwrap_or(cd);
+                let hl = hl.unwrap_or(cl);
+                println!("Updated {} of {}, {} ops per sec", hd + hl, cd + cl, self.c);
+                self.t = Instant::now();
+                self.c = 0;
+            }
             self.valid = true;
-            //println!("---------------------------------");
+//            println!("---------------------------------");
             if let Some(encoded) = self.generate(Path::new("root".to_string()), self.encoding) {
+                self.c += 1;
+//                println!("done: {}", self.valid);
                 return Some((encoded, self.valid));
             }
-            //println!("done: {}", self.valid);
         }
         None
     }
@@ -367,14 +392,14 @@ where
     EncodingIter::new(encoding, indices, datas)
 }
 
-pub fn range_simple(r: &Constraint) -> impl Iterator<Item = Idx> {
+pub fn range_simple(r: &Constraint) -> std::vec::IntoIter<Idx> {
     let start = r.lower.unwrap_or(0);
     let end = r.upper.unwrap_or(Idx::MAX);
     let vec = vec![start, end];
     vec.into_iter()
 }
 
-pub fn range_extended(r: &Constraint) -> impl Iterator<Item = Idx> {
+pub fn range_extended(r: &Constraint) -> std::vec::IntoIter<Idx> {
     let start = r.lower.unwrap_or(0);
     let end = r.upper.unwrap_or(Idx::MAX);
     let mut vec = vec![start, end];
