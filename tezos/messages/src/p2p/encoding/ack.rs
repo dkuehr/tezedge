@@ -21,7 +21,7 @@ use crate::p2p::binary_message::{complete_input, SizeFromChunk};
 
 use super::limits::{NACK_PEERS_MAX_LENGTH, P2P_POINT_MAX_SIZE};
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, HasEncoding, NomReader)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, HasEncoding)]
 pub enum AckMessage {
     #[encoding(tag = 0x00)]
     Ack,
@@ -29,6 +29,40 @@ pub enum AckMessage {
     NackV0,
     #[encoding(tag = 0x01)]
     Nack(NackInfo),
+}
+
+impl tezos_encoding::nom::NomReader for AckMessage {
+    fn nom_read(bytes: &[u8]) -> tezos_encoding::nom::NomResult<Self> {
+        //Self::nom_read_impl(bytes)
+        panic!("don't panic")
+    }
+}
+#[allow(unused_parens)]
+#[allow(clippy::unnecessary_cast)]
+impl AckMessage {
+    fn nom_read_impl(bytes: &[u8]) -> tezos_encoding::nom::NomResult<Self> {
+        (|input| {
+            let (input, tag) = nom::number::complete::u8(input)?;
+            let (input, variant) = if tag == 0x00 {
+                (|bytes| Ok((bytes, AckMessage::Ack)))(input)?
+            } else if tag == 0xff {
+                (|bytes| Ok((bytes, AckMessage::NackV0)))(input)?
+            } else if tag == 0x01 {
+                (nom::combinator::map(
+                    tezos_encoding::nom::variant(
+                        "AckMessage::Nack",
+                        <NackInfo as tezos_encoding::nom::NomReader>::nom_read,
+                    ),
+                    AckMessage::Nack,
+                ))(input)?
+            } else {
+                return Err(nom::Err::Failure(
+                    tezos_encoding::nom::error::DecodeError::invalid_tag(input, format!("0x{:.2X}", tag)),
+                ));
+            };
+            Ok((input, variant))
+        })(bytes)
+    }
 }
 
 impl SizeFromChunk for AckMessage {
