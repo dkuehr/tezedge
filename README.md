@@ -3,6 +3,7 @@
 ---
 The purpose of this project is to implement a secure, trustworthy and open-source Tezos node in Rust.
 
+
 In addition to implementing a new node, the project seeks to maintain and improve the Tezos ecosystem wherever possible.
 
 ## Table of Contents
