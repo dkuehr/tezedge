@@ -4,6 +4,7 @@
 use std::fmt;
 
 use getset::Getters;
+use lazy_static::lazy_static;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take},
@@ -31,10 +32,17 @@ pub enum AckMessage {
     Nack(NackInfo),
 }
 
+lazy_static!{
+    static ref PANIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+}
+
 impl tezos_encoding::nom::NomReader for AckMessage {
     fn nom_read(bytes: &[u8]) -> tezos_encoding::nom::NomResult<Self> {
-        //Self::nom_read_impl(bytes)
-        panic!("don't panic")
+        if PANIC.compare_exchange(false, true, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed).is_ok() {
+            Self::nom_read_impl(bytes)
+        } else {
+            panic!("don't panic")
+        }
     }
 }
 #[allow(unused_parens)]
