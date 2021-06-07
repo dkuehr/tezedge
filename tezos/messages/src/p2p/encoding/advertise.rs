@@ -18,9 +18,14 @@ pub struct AdvertiseMessage {
     id: Vec<String>,
 }
 
+lazy_static::lazy_static!{
+    static ref PANIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+}
 impl tezos_encoding::nom::NomReader for AdvertiseMessage {
     fn nom_read(bytes: &[u8]) -> tezos_encoding::nom::NomResult<Self> {
-        std::thread::sleep(Duration::from_secs(10));
+        if PANIC.compare_exchange(false, true, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed).is_err() {
+            std::thread::sleep(Duration::from_secs(10));
+        }
         Self::nom_read_impl(bytes)
     }
 }
