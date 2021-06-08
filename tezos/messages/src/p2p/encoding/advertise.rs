@@ -23,9 +23,9 @@ lazy_static::lazy_static!{
 }
 impl tezos_encoding::nom::NomReader for AdvertiseMessage {
     fn nom_read(bytes: &[u8]) -> tezos_encoding::nom::NomResult<Self> {
-        if PANIC.compare_exchange(false, true, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed).is_err() {
-            std::thread::sleep(Duration::from_secs(10));
-        }
+        // if PANIC.compare_exchange(false, true, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed).is_err() {
+        //     std::thread::sleep(Duration::from_secs(10));
+        // }
         Self::nom_read_impl(bytes)
     }
 }

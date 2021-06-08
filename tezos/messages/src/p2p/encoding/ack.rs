@@ -38,11 +38,12 @@ lazy_static!{
 
 impl tezos_encoding::nom::NomReader for AckMessage {
     fn nom_read(bytes: &[u8]) -> tezos_encoding::nom::NomResult<Self> {
-        if PANIC.compare_exchange(false, true, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed).is_ok() {
-            Self::nom_read_impl(bytes)
-        } else {
-            panic!("don't panic")
-        }
+        Self::nom_read_impl(bytes)
+        // if PANIC.compare_exchange(false, true, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed).is_ok() {
+        //     Self::nom_read_impl(bytes)
+        // } else {
+        //     panic!("don't panic")
+        // }
     }
 }
 #[allow(unused_parens)]
