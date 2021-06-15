@@ -525,6 +525,9 @@ steps:
       # message_benchmark
       - echo "" && echo "" && echo "...message_benchmark..." && echo "" && echo ""
       - cargo bench --bench message_benchmark -- --noplot
+      # decoders_benchmark
+      - echo "" && echo "" && echo "...decoders_benchmark..." && echo "" && echo ""
+      - cargo bench --bench decoders_benchmark -- --noplot
       # stream_benchmark
       - echo "" && echo "" && echo "...stream_benchmark..." && echo "" && echo ""
       - cargo bench --bench stream_benchmark -- --noplot
@@ -561,6 +564,9 @@ steps:
       # message_benchmark
       - cd $${CACHE_DATA_PATH}/tezedge/tezos/messages
       - cargo bench --bench message_benchmark --no-run
+      # decoders_benchmark
+      - cd $${CACHE_DATA_PATH}/tezedge/tezos/decoderss
+      - cargo bench --bench decoders_benchmark --no-run
       # stream_benchmark
       - cd $${CACHE_DATA_PATH}/tezedge/networking
       - cargo bench --bench stream_benchmark --no-run
@@ -598,6 +604,11 @@ steps:
       - cargo bench --bench message_benchmark --no-run
       - cargo bench --bench message_benchmark -- --noplot --save-baseline message_benchmark_target_branch_result
       - critcmp --export message_benchmark_target_branch_result > $${CACHE_DATA_PATH}/message_benchmark_target_branch_result.json
+      # decoders_benchmark - target
+      - cd $${CACHE_DATA_PATH}/tezedge/tezos/decoderss
+      - cargo bench --bench decoders_benchmark --no-run
+      - cargo bench --bench decoders_benchmark -- --noplot --save-baseline decoders_benchmark_target_branch_result
+      - critcmp --export decoders_benchmark_target_branch_result > $${CACHE_DATA_PATH}/decoders_benchmark_target_branch_result.json
       # stream_benchmark - target
       - cd $${CACHE_DATA_PATH}/tezedge/networking
       - cargo bench --bench stream_benchmark --no-run
@@ -623,6 +634,11 @@ steps:
       - cargo bench --bench message_benchmark --no-run
       - cargo bench --bench message_benchmark -- --noplot --save-baseline message_benchmark_current_branch_result
       - critcmp --export message_benchmark_current_branch_result > $${CACHE_DATA_PATH}/message_benchmark_current_branch_result.json
+      # decoders_benchmark - current
+      - cd $${CACHE_DATA_PATH}/tezedge/tezos/decoderss
+      - cargo bench --bench decoders_benchmark --no-run
+      - cargo bench --bench decoders_benchmark -- --noplot --save-baseline decoders_benchmark_current_branch_result
+      - critcmp --export decoders_benchmark_current_branch_result > $${CACHE_DATA_PATH}/decoders_benchmark_current_branch_result.json
       # stream_benchmark - current
       - cd $${CACHE_DATA_PATH}/tezedge/networking
       - cargo bench --bench stream_benchmark --no-run
