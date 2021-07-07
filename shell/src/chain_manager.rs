@@ -327,9 +327,9 @@ impl ChainManager {
                     PeerState::new(peer_id, &peer_metadata, chain_state.data_queues_limits());
                 // store peer
                 let actor_uri = peer.peer_id.peer_ref.uri().clone();
-                self.peers.insert(actor_uri.clone(), peer);
+                peers.insert(actor_uri.clone(), peer);
                 // retrieve mutable reference and use it as `tell_peer()` parameter
-                if let Some(peer) = self.peers.get_mut(&actor_uri) {
+                if let Some(peer) = self.peers.get(&actor_uri) {
                     tell_peer(
                         GetCurrentBranchMessage::new(chain_state.get_chain_id().as_ref().clone())
                             .into(),
@@ -337,7 +337,7 @@ impl ChainManager {
                     );
                 }
             }
-            NetworkChannelMsg::PeerStalled(actor_uri) => {
+            NetworkChannelMsg::PeerStopped(actor_uri) => {
                 // remove peer from inner state
                 if let Some(mut peer_state) = self.peers.remove(&actor_uri) {
                     // clear innner state (not needed, it will be drop)

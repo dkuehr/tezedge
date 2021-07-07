@@ -677,17 +677,14 @@ impl Receive<DeadLetter> for PeerManager {
         match self.peers.try_remove_peer_actor(peer_actor_uri) {
             Ok(was_removed) => {
                 if was_removed {
-                    // kick immediatelly if it is a peer's actor and try_remove
-                    ctx.system.stop(msg.recipient);
+                    warn!(ctx.system.log(), "Received a DeadLetter for a peer not properly terminated";
+                          "peer_actor" => peer_actor_uri.to_string());
                 } else {
-                    // just send stalled peer msg (to give chance to cleanup)
-                    self.network_channel.tell(
-                        Publish {
-                            msg: NetworkChannelMsg::PeerStalled(Arc::new(peer_actor_uri.clone())),
-                            topic: NetworkChannelTopic::NetworkEvents.into(),
-                        },
-                        None,
-                    );
+                    let sender = msg
+                        .sender
+                        .map_or("<unknown sender>".to_string(), |r| r.uri().to_string());
+                    info!(ctx.system.log(), "Received a DeadLetter for a peer";
+                          "peer_actor" => peer_actor_uri.to_string(), "sender" => sender, "dead_letter" => msg.msg);
                 }
             }
             Err(e) => {
@@ -752,8 +749,17 @@ impl Receive<SystemEvent> for PeerManager {
                 return;
             }
 
-            // try to remove peers actor
             let peer_actor_uri = evt.actor.uri();
+
+            self.network_channel.tell(
+                Publish {
+                    msg: NetworkChannelMsg::PeerStopped(Arc::new(peer_actor_uri.clone())),
+                    topic: NetworkChannelTopic::NetworkEvents.into(),
+                },
+                None,
+            );
+
+            // try to remove peers actor
             match self.peers.try_remove_peer_actor(peer_actor_uri) {
                 Ok(was_removed) => {
                     if was_removed {
