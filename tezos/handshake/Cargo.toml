@@ -1,0 +1,23 @@
+[package]
+name = "handshake"
+version = "1.8.0"
+edition = "2018"
+
+[profile.dev]
+debug-impossible = true
+
+[profile.test]
+debug-impossible = true
+
+[profile.release]
+debug-impossible = false
+
+[profile.bench]
+debug-impossible = false
+
+[dependencies]
+anyhow = "1.0"
+thiserror = "1.0"
+mio = { version = "0.7", features = ["net", "os-poll"] }
+crypto = { path = "../../crypto" }
+tezos_messages = { path = "../messages" }
