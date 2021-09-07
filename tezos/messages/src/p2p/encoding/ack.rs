@@ -53,6 +53,13 @@ impl SizeFromChunk for AckMessage {
     }
 }
 
+impl From<NackInfo> for AckMessage {
+    fn from(nack_info: NackInfo) -> Self {
+        Self::Nack(nack_info)
+    }
+}
+
+
 #[derive(Serialize, Getters, PartialEq, Clone, HasEncoding, NomReader, BinWriter, Generated)]
 pub struct NackInfo {
     #[get = "pub"]

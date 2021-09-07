@@ -9,7 +9,7 @@ use mio::{
 use crate::redux::{Dispatcher, Middleware, State};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct StreamId(usize);
+pub struct StreamId(pub usize);
 
 /// Low-level actions for an abstract server.
 #[derive(Debug)]
@@ -88,13 +88,6 @@ impl From<(StreamId, io::Error)> for NetworkAction {
 
 /// State capable for async reading and writing
 pub trait NetworkState {
-    /// Returns `true` if listening for incoming connections.
-    fn is_listening(&self) -> bool;
-    /// Returns `true` if the state is reading from `stream_id`.
-    fn is_reading(&self, stream_id: StreamId) -> bool;
-    /// Returns `true` if the state is writing to `stream_id`.
-    fn is_writing(&self, stream_id: StreamId) -> bool;
-
     /// Start listening for incoming connections.
     fn start_listening(&mut self);
 
@@ -309,12 +302,9 @@ impl<S: State<A> + NetworkState, A: From<NetworkAction>> NetworkMiddleware<S, A>
         &mut self,
         stream_id: StreamId,
         size: usize,
-        state: &S,
         dispatch: &mut impl FnMut(NetworkAction),
     ) -> Result<(), NetworkError> {
-        if state.is_reading(stream_id) {
-            Err(NetworkError::AlreadyReading(stream_id))
-        } else if let Some(stream) = self.streams.get_mut(&stream_id) {
+        if let Some(stream) = self.streams.get_mut(&stream_id) {
             stream.set_read_size(size);
             Self::read_stream(stream_id, stream, dispatch);
             Ok(())
@@ -327,12 +317,9 @@ impl<S: State<A> + NetworkState, A: From<NetworkAction>> NetworkMiddleware<S, A>
         &mut self,
         stream_id: StreamId,
         bytes: Vec<u8>,
-        state: &S,
         dispatch: &mut impl FnMut(NetworkAction),
     ) -> Result<(), NetworkError> {
-        if state.is_writing(stream_id) {
-            Err(NetworkError::AlreadyWriting(stream_id))
-        } else if let Some(stream) = self.streams.get_mut(&stream_id) {
+        if let Some(stream) = self.streams.get_mut(&stream_id) {
             stream.set_write_bytes(bytes);
             Self::write_stream(stream_id, stream, dispatch);
             Ok(())
@@ -351,8 +338,8 @@ impl<S: State<A> + NetworkState, A: From<NetworkAction>> NetworkMiddleware<S, A>
         let result = match &action {
             NetworkAction::Listen(socket_addr) => self.listen(*socket_addr, dispatch),
             NetworkAction::ConnectTo(socket_addr) => self.connect_to(*socket_addr, dispatch),
-            NetworkAction::Read(stream_id, size) => self.start_read(*stream_id, *size, state, &mut dispatch),
-            NetworkAction::Write(stream_id, bytes) => self.start_write(*stream_id, bytes.clone(), state, &mut dispatch),
+            NetworkAction::Read(stream_id, size) => self.start_read(*stream_id, *size, &mut dispatch),
+            NetworkAction::Write(stream_id, bytes) => self.start_write(*stream_id, bytes.clone(), &mut dispatch),
             NetworkAction::Tick => self.poll_streams(state, &mut dispatch),
             _ => Ok(()),
         };

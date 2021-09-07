@@ -137,6 +137,10 @@ where
         self.dispatcher.push_front(action);
     }
 
+    pub fn dispatch_iter(&mut self, actions: impl IntoIterator<Item = A>) {
+        actions.into_iter().for_each(|action| self.dispatch(action));
+    }
+
     pub fn get_state(&self) -> &S {
         &self.state
     }
