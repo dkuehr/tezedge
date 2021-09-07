@@ -1,6 +1,6 @@
 use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
-use handshake::{network::{self, NetworkAction, NetworkMiddleware, NetworkState, StreamId}, redux::{Dispatcher, State, Store}};
+use handshake::{network::{self, NetworkAction, NetworkMiddleware, NetworkState, StreamId}, redux::{Dispatcher, Middleware, State, Store}};
 
 #[derive(Debug)]
 enum EchoServerState {
@@ -16,31 +16,43 @@ enum EchoServerState {
 #[derive(Debug)]
 enum StreamState {
     Idle,
-    Reading { data: Vec<u8>, reading: bool },
+    Reading { data: Vec<u8> },
     Ready { data: Vec<u8> },
-    Writing { writing: bool },
+    Writing,
+
+    Error(EchoError),
 }
 
 #[derive(Debug)]
 enum EchoServerAction {
     Start,
-    SendIfReady(StreamId),
+    Listen(StreamId),
+    Cry(StreamId, Vec<u8>),
+    Echo(StreamId, Vec<u8>),
+
+    Error(EchoError),
 
     Net(NetworkAction),
 }
 
+#[derive(Debug)]
+enum EchoError {
+    IncompleteInput,
+    CannotWrite,
+}
+
 impl StreamState {
     fn is_reading(&self) -> bool {
-        if let Self::Reading { reading, .. } = self {
-            *reading
+        if let Self::Reading { .. } = self {
+            true
         } else {
             false
         }
     }
 
     fn is_writing(&self) -> bool {
-        if let Self::Writing { writing } = self {
-            *writing
+        if let Self::Writing = self {
+            true
         } else {
             false
         }
@@ -48,11 +60,10 @@ impl StreamState {
 
     fn start_read(&mut self) {
         match self {
-            Self::Reading { reading, .. } => *reading = true,
+            Self::Reading { .. } => (),
             _ => {
                 *self = Self::Reading {
                     data: Vec::new(),
-                    reading: true,
                 }
             }
         }
@@ -60,11 +71,10 @@ impl StreamState {
 
     fn append_bytes(&mut self, bytes: Vec<u8>) {
         match self {
-            Self::Reading { data, reading } if *reading && bytes.as_slice() != EOL => {
+            Self::Reading { data } if bytes.as_slice() != EOL => {
                 data.extend(bytes);
-                *reading = false;
             }
-            Self::Reading { data, reading } if *reading => {
+            Self::Reading { data } => {
                 data.extend(bytes);
                 *self = Self::Ready { data: data.clone() };
             }
@@ -74,15 +84,12 @@ impl StreamState {
 
     fn start_write(&mut self) {
         match self {
-            Self::Writing { writing, .. } => *writing = true,
-            _ => *self = Self::Writing { writing: true },
+            Self::Writing => (),
+            _ => *self = Self::Writing,
         }
     }
 
     fn done_write(&mut self) {
-        if let Self::Writing { writing } = self {
-            *writing = false;
-        }
     }
 }
 
@@ -117,6 +124,21 @@ impl EchoServerState {
         dispatcher.dispatch(NetworkAction::Read(stream_id, 1));
     }
 
+    fn handle_read_ready(&self, stream_id: StreamId, bytes: &Vec<u8>, dispatcher: &mut Dispatcher<EchoServerAction>) {
+        self.with_stream(stream_id, |stream| {
+            match stream {
+                StreamState::Reading { data } => if bytes.as_slice() == EOL {
+                    dispatcher.dispatch(EchoServerAction::Echo(stream_id))
+                } else {
+                    dispatcher.dispatch(NetworkAction::Read(stream_id, 1))
+                }
+                _ => ()
+            }
+        })
+    }
+
+
+
     fn send_if_ready(&self, stream_id: StreamId, dispatcher: &mut Dispatcher<EchoServerAction>) {
         self.with_stream(stream_id, |stream| match stream {
             StreamState::Reading { reading: false, .. } => {
@@ -130,6 +152,8 @@ impl EchoServerState {
             }
         });
     }
+
+
 }
 
 impl State<EchoServerAction> for EchoServerState {
@@ -144,20 +168,6 @@ impl State<EchoServerAction> for EchoServerState {
 const EOL: &[u8] = &[0x0a];
 
 impl NetworkState for EchoServerState {
-    fn is_listening(&self) -> bool {
-        matches!(self, Self::Listening { .. })
-    }
-
-    fn is_reading(&self, stream_id: StreamId) -> bool {
-        self.with_stream(stream_id, StreamState::is_reading)
-            .unwrap_or(false)
-    }
-
-    fn is_writing(&self, stream_id: StreamId) -> bool {
-        self.with_stream(stream_id, StreamState::is_writing)
-            .unwrap_or(false)
-    }
-
     fn start_listening(&mut self) {
         *self = Self::Listening {
             streams: HashMap::new(),
@@ -198,7 +208,95 @@ impl NetworkState for EchoServerState {
     }
 
     fn idle(&mut self) {}
+
+    fn read_closed(&mut self, _: StreamId) {
+        self.with_mut_stream(stream_id, |stream| {
+            match stream {
+//                StreamState::Reading { data } if !data.is_empty() => *stream &mut StreamState::Error(StreamError::IncompleteInput),
+            }
+        })
+    }
 }
+
+
+
+fn echo_server_to_network_middleware(state: &EchoServerState, action: EchoServerAction, dispatcher: &mut Dispatcher<EchoServerAction>) -> Option<EchoServerAction> {
+    match &action {
+        EchoServerAction::Start => dispatcher.dispatch(NetworkAction::Listen(todo!())),
+        EchoServerAction::Echo(stream_id, data) => dispatcher.dispatch(NetworkAction::Write(*stream_id, data.clone())),
+        EchoServerAction::Error(err) => eprintln!("error: {:?}", err),
+        _ => (),
+    }
+    Some(action)
+}
+
+fn network_to_echo_server_middleware(state: &EchoServerState, action: EchoServerAction, dispatcher: &mut Dispatcher<EchoServerAction>) -> Option<EchoServerAction> {
+    if let EchoServerAction::Net(action) = &action {
+        match action {
+            NetworkAction::Listening => dispatcher.dispatch(EchoServerAction::Listening),
+            NetworkAction::Accepted(stream_id, _) => dispatcher.dispatch(EchoServerAction::IncomingConnection(stream_id)),
+            NetworkAction::ReadReady(stream_id, bytes) if bytes.as_slice() == EOL => state.with_stream(*stream_id, |stream| {
+                if let StreamState::Reading { data } = stream {
+                    let data = data.clone();
+                    data.extend(data);
+                    dispatcher.dispatch(EchoServerAction::Cry(*stream_id, data));
+                }
+            }),
+            NetworkAction::ReadClosed(_) => state.with_stream(*stream_id, |stream| {
+                match stream {
+                    StreamState::Reading { data } if !data.is_empty() => dispatcher.dispatch(EchoServerAction::Error(EchoError::IncompleteInput(*stream_id))),
+                    _ => (),
+                }
+            }),
+            NetworkAction::WriteReady(_) => todo!(),
+            NetworkAction::WriteClosed(_) => todo!(),
+            NetworkAction::Tick => todo!(),
+            NetworkAction::Error(_) => todo!(),
+        }
+    }
+    Some(action)
+}
+
+
+struct EchoServerMiddleware {
+
+}
+
+impl EchoServerMiddleware {
+    fn on_cry(&self, state: &EchoServerState, stream_id: StreamId, cry: &Vec<u8>, dispatcher: &mut Dispatcher<EchoServerAction>) -> Option<EchoServerAction> {
+        state.with_stream(stream_id, |stream| {
+            match stream {
+                StreamState::Error(_) => (),
+                _ => dispatcher.dispatch(EchoServerAction::Echo(stream_id, cry.clone())),
+            }
+        })
+    }
+}
+
+impl Middleware<EchoServerState, EchoServerAction> for EchoServerMiddleware {
+    fn apply(&mut self, state: &EchoServerState, action: EchoServerAction, dispatcher: &mut Dispatcher<EchoServerAction>) -> Option<EchoServerAction> {
+        match &action {
+            EchoServerAction::Cry(stream_id, bytes) => self.on_cry(state, stream_id, cry, dispatcher),
+            _ => (),
+        }
+        Some(action)
+    }
+}
+
+struct EchoServerToNetworkMiddleware {}
+
+impl Middleware<EchoServerState, EchoServerAction> for EchoServerToNetworkMiddleware {
+    fn apply(&mut self, state: &EchoServerState, action: EchoServerAction, dispatcher: &mut Dispatcher<EchoServerAction>) -> Option<EchoServerAction> {
+        match &action {
+            EchoServerAction::Start => self.on_start(state, dispatcher),
+            EchoServerAction::Echo(stream_id, data) => self.on_echo(stream_id, data),
+            EchoServerAction::Error(err) => self.on_error(err),
+            EchoServerAction::Net(_) => (),
+        }
+        Some(action)
+    }
+}
+
 
 fn echo_server_middleware(
     state: &EchoServerState,
@@ -220,11 +318,17 @@ fn echo_server_middleware(
                 NetworkAction::Accepted(stream_id, _) => {
                     state.start_receiving(*stream_id, dispatcher)
                 }
-                NetworkAction::ReadReady(stream_id, _) => {
-                    dispatcher.dispatch(EchoServerAction::SendIfReady(*stream_id))
+                NetworkAction::ReadReady(stream_id, bytes) => {
+                    state.handle_read_ready(*stream_id, bytes, dispatcher);
+                }
+                NetworkAction::ReadClosed(stream_id) => {
+                    state.handle_read_closed(*stream_id, dispatcher);
                 }
                 NetworkAction::WriteReady(stream_id) => {
-                    dispatcher.dispatch(NetworkAction::Read(*stream_id, 1))
+                    state.handle_write_ready(*stream_id, dispatcher);
+                }
+                NetworkAction::WriteClosed(stream_id) => {
+                    state.handle_write_closed(*stream_id, dispatcher);
                 }
                 _ => (),
             }
