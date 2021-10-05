@@ -538,10 +538,12 @@ pub(crate) async fn get_shell_automaton_actions_graph(
     actions_graph.sort_by_key(|(_, k)| *k);
     let actions_graph = actions_graph.into_iter().enumerate().map(|(i, (s, i2))| {
         assert_eq!(i, i2);
+        let mut next_actions: Vec<_> = next_actions[i].iter().cloned().collect();
+        next_actions.sort();
         ActionGraphNode {
             action_id: i,
             action_name: format!("{:?}", s),
-            next_actions: next_actions[i].iter().cloned().collect(),
+            next_actions,
         }
     }).collect::<Vec<_>>();
 
