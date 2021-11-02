@@ -43,9 +43,10 @@ use crate::mempool::{
     BlockAppliedAction, MempoolAskCurrentHeadAction, MempoolBroadcastAction,
     MempoolBroadcastDoneAction, MempoolCleanupWaitPrevalidatorAction, MempoolFlushAction,
     MempoolGetOperationsAction, MempoolGetPendingOperationsAction,
-    MempoolMarkOperationsAsPendingAction, MempoolOperationInjectAction,
-    MempoolOperationRecvDoneAction, MempoolRecvDoneAction, MempoolRegisterOperationsStreamAction,
-    MempoolRemoveAppliedOperationsAction, MempoolRpcRespondAction, MempoolSendAction,
+    MempoolMarkOperationsAsPendingAction, MempoolOperationDecodedAction,
+    MempoolOperationInjectAction, MempoolOperationRecvDoneAction, MempoolRecvDoneAction,
+    MempoolRegisterOperationsStreamAction, MempoolRemoveAppliedOperationsAction,
+    MempoolRpcEndorsementsStatusGetAction, MempoolRpcRespondAction, MempoolSendAction,
     MempoolUnregisterOperationsStreamsAction, MempoolValidateStartAction,
     MempoolValidateWaitPrevalidatorAction,
 };
@@ -63,6 +64,15 @@ use crate::peers::graylist::{
     PeersGraylistIpRemoveAction, PeersGraylistIpRemovedAction,
 };
 use crate::peers::remove::PeersRemoveAction;
+use crate::prechecker::{
+    PrecheckerBlockAppliedAction, PrecheckerCacheAppliedBlockAction,
+    PrecheckerDecodeOperationAction, PrecheckerEndorsementValidationAppliedAction,
+    PrecheckerEndorsementValidationRefusedAction, PrecheckerEndorsingRightsReadyAction,
+    PrecheckerErrorAction, PrecheckerGetEndorsingRightsAction, PrecheckerOperationDecodedAction,
+    PrecheckerPrecheckOperationInitAction, PrecheckerPrecheckOperationRequestAction,
+    PrecheckerPrecheckOperationResponseAction, PrecheckerProtocolNeededAction,
+    PrecheckerValidateEndorsementAction, PrecheckerWaitForBlockApplicationAction,
+};
 use crate::protocol::ProtocolAction;
 
 use crate::rights::{
@@ -74,7 +84,9 @@ use crate::rights::{
     RightsEndorsingRightsGetProtocolConstantsAction, RightsEndorsingRightsGetProtocolHashAction,
     RightsEndorsingRightsProtocolConstantsReadyAction,
     RightsEndorsingRightsProtocolHashReadyAction, RightsEndorsingRightsReadyAction,
-    RightsGetEndorsingRightsAction,
+    RightsGetEndorsingRightsAction, RightsRpcEndorsingRightsErrorAction,
+    RightsRpcEndorsingRightsGetAction, RightsRpcEndorsingRightsPruneAction,
+    RightsRpcEndorsingRightsReadyAction,
 };
 use crate::storage::request::{
     StorageRequestCreateAction, StorageRequestErrorAction, StorageRequestFinishAction,
@@ -280,10 +292,32 @@ pub enum Action {
     MempoolRemoveAppliedOperations(MempoolRemoveAppliedOperationsAction),
     MempoolGetPendingOperations(MempoolGetPendingOperationsAction),
     MempoolFlush(MempoolFlushAction),
+    MempoolOperationDecoded(MempoolOperationDecodedAction),
+    MempoolRpcEndorsementsStatusGet(MempoolRpcEndorsementsStatusGetAction),
 
     BlockApplied(BlockAppliedAction),
 
+    PrecheckerPrecheckOperationRequest(PrecheckerPrecheckOperationRequestAction),
+    PrecheckerPrecheckOperationResponse(PrecheckerPrecheckOperationResponseAction),
+    PrecheckerCacheAppliedBlock(PrecheckerCacheAppliedBlockAction),
+    PrecheckerPrecheckOperationInit(PrecheckerPrecheckOperationInitAction),
+    PrecheckerDecodeOperation(PrecheckerDecodeOperationAction),
+    PrecheckerOperationDecoded(PrecheckerOperationDecodedAction),
+    PrecheckerWaitForBlockApplication(PrecheckerWaitForBlockApplicationAction),
+    PrecheckerBlockApplied(PrecheckerBlockAppliedAction),
+    PrecheckerGetEndorsingRights(PrecheckerGetEndorsingRightsAction),
+    PrecheckerEndorsingRightsReady(PrecheckerEndorsingRightsReadyAction),
+    PrecheckerValidateEndorsement(PrecheckerValidateEndorsementAction),
+    PrecheckerEndorsementValidationApplied(PrecheckerEndorsementValidationAppliedAction),
+    PrecheckerEndorsementValidationRefused(PrecheckerEndorsementValidationRefusedAction),
+    PrecheckerProtocolNeeded(PrecheckerProtocolNeededAction),
+    PrecheckerError(PrecheckerErrorAction),
+
     RightsGetEndorsingRights(RightsGetEndorsingRightsAction),
+    RightsRpcEndorsingRightsGet(RightsRpcEndorsingRightsGetAction),
+    RightsRpcEndorsingRightsReady(RightsRpcEndorsingRightsReadyAction),
+    RightsRpcEndorsingRightsError(RightsRpcEndorsingRightsErrorAction),
+    RightsRpcEndorsingRightsPrune(RightsRpcEndorsingRightsPruneAction),
     RightsEndorsingRightsGetBlockHeader(RightsEndorsingRightsGetBlockHeaderAction),
     RightsEndorsingRightsBlockHeaderReady(RightsEndorsingRightsBlockHeaderReadyAction),
     RightsEndorsingRightsGetProtocolHash(RightsEndorsingRightsGetProtocolHashAction),

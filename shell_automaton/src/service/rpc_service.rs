@@ -1,17 +1,17 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{collections::HashMap, fmt, sync::Arc};
+use std::{collections::HashMap, sync::Arc, thread};
 
-use crypto::hash::OperationHash;
-use tezos_messages::p2p::encoding::operation::Operation;
+use crypto::hash::{BlockHash, OperationHash};
+use tezos_messages::p2p::encoding::{block_header::Level, operation::Operation};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::State;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RpcId(u64);
 
 pub type RpcRecvError = mpsc::error::TryRecvError;
@@ -21,7 +21,9 @@ pub trait RpcService {
     fn try_recv(&mut self) -> Result<(RpcRequest, RpcId), RpcRecvError>;
 
     /// Respond on the request, `json` is `None` means close the stream
-    fn respond(&mut self, call_id: RpcId, json: serde_json::Value);
+    fn respond<J>(&mut self, call_id: RpcId, json: J)
+    where
+        J: 'static + Send + Serialize;
 
     /// Try to receive a request from rpc, but response is expected to be stream
     fn try_recv_stream(&mut self) -> Result<(RpcRequestStream, RpcId), RpcRecvError>;
@@ -49,6 +51,13 @@ pub enum RpcRequest {
     },
     MempoolStatus,
     GetPendingOperations,
+    GetEndorsingRights {
+        block_hash: BlockHash,
+        level: Option<Level>,
+    },
+    GetEndorsementsStatus {
+        block_hash: Option<BlockHash>,
+    },
 }
 
 #[derive(Debug)]
@@ -68,13 +77,9 @@ pub struct RpcShellAutomatonSender {
     mio_waker: Arc<mio::Waker>,
 }
 
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("the channel between rpc and shell is overflown")]
 pub struct RpcShellAutomatonChannelSendError;
-
-impl fmt::Display for RpcShellAutomatonChannelSendError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "the channel between rpc and shell is overflown")
-    }
-}
 
 impl RpcShellAutomatonSender {
     pub async fn send(
@@ -143,9 +148,17 @@ impl RpcService for RpcServiceDefault {
         Ok((msg, id))
     }
 
-    fn respond(&mut self, call_id: RpcId, json: serde_json::Value) {
+    fn respond<J>(&mut self, call_id: RpcId, json: J)
+    where
+        J: 'static + Send + Serialize,
+    {
         if let Some(sender) = self.outgoing.remove(&call_id) {
-            let _ = sender.send(json);
+            thread::spawn(move || {
+                let _ = sender.send(
+                    serde_json::to_value(json)
+                        .unwrap_or_else(|e| serde_json::json!({"error": e.to_string()})),
+                );
+            });
         }
     }
 

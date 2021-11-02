@@ -18,6 +18,7 @@ use tezos_messages::p2p::encoding::prelude::{BlockHeader, Operation};
 
 use crate::helpers::RpcServiceError;
 use crate::server::RpcServiceEnvironment;
+use crate::services::dev_services;
 
 const INJECT_BLOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const INJECT_OPERATION_WAIT_TIMEOUT: Duration = Duration::from_secs(60);

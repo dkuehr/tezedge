@@ -19,8 +19,11 @@ impl RpcService for RpcServiceDummy {
         Err(RpcRecvError::Empty)
     }
 
-    fn respond(&mut self, call_id: RpcId, json: serde_json::Value) {
-        let _ = (call_id, json);
+    fn respond<J>(&mut self, call_id: RpcId, json: J)
+    where
+        J: serde::Serialize,
+    {
+        let _ = (call_id, serde_json::to_value(json));
     }
 
     fn try_recv_stream(&mut self) -> Result<(RpcRequestStream, RpcId), RpcRecvError> {

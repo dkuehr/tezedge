@@ -1,9 +1,9 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use crypto::hash::ProtocolHash;
+use crypto::hash::{ProtocolHash, TryFromPKError};
 use redux_rs::ActionId;
 use storage::{cycle_eras_storage::CycleErasData, cycle_storage::CycleData};
 use tezos_messages::{
@@ -11,7 +11,7 @@ use tezos_messages::{
 };
 
 use crate::{
-    service::storage_service::StorageError,
+    service::{rpc_service::RpcId, storage_service::StorageError},
     storage::{
         kv_block_additional_data, kv_block_header, kv_constants, kv_cycle_eras, kv_cycle_meta,
     },
@@ -26,6 +26,7 @@ use super::{
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct RightsState {
     pub endorsing_rights: HashMap<EndorsingRightsKey, EndorsingRightsRequest>,
+    pub rpc_requests: BTreeMap<RpcId, EndorsingRightsKey>,
 }
 
 impl RightsState {
@@ -44,7 +45,7 @@ pub struct EndorsingRights {
     pub delegate_to_slots: HashMap<Delegate, Vec<Slot>>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, strum_macros::AsRefStr)]
 pub enum EndorsingRightsRequest {
     /// Request for endorsing rights for the given level is initialized.
     Init {
@@ -123,17 +124,34 @@ pub enum EndorsingRightsRequest {
     Error(EndorsingRightsError),
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, derive_more::From)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, thiserror::Error)]
 pub enum EndorsingRightsError {
-    Storage(StorageError),
+    #[error("Storage error: {0}")]
+    Storage(#[from] StorageError),
+    #[error("Missing block header")]
     MissingBlockHeader,
+    #[error("Missing block header")]
     MissingProtocolHash,
+    #[error("Missing block header")]
     MissingProtocolConstants,
+    #[error("Error parsing protocol constants: {0}")]
     ParseProtocolConstants(String),
+    #[error("Missing cycle eras")]
     MissingCycleEras,
-    Cycle(CycleError),
+    #[error("Error calculating cycle: {0}")]
+    Cycle(#[from] CycleError),
+    #[error("Missing cycle meta data")]
     MissingCycleData,
-    Calculation(EndorsingRightsCalculationError),
+    #[error("Error calculating endorsing rights: {0}")]
+    Calculation(#[from] EndorsingRightsCalculationError),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, thiserror::Error)]
+pub enum EndorsingRightsRpcError {
+    #[error("Error calculating delegate hash")]
+    Hash(#[from] TryFromPKError),
+    #[error(transparent)]
+    Other(#[from] EndorsingRightsError),
 }
 
 /*
