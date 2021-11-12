@@ -2937,8 +2937,8 @@ volumes:
 
 trigger:
   branch:
-    - x_master
-    - x_develop
+    - master
+    - develop
 
 depends_on:
   - build-tezedge-binaries
@@ -6525,8 +6525,8 @@ depends_on:
 
 trigger:
   branch:
-    - x_master
-    - x_develop
+    - master
+    - develop
 
 volumes:
   - name: snapshots
@@ -6726,8 +6726,8 @@ depends_on:
 
 trigger:
   branch:
-    - x_master
-    - x_develop
+    - master
+    - develop
 
 volumes:
   - name: snapshots
