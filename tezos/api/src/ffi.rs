@@ -163,7 +163,7 @@ pub struct ValidateOperationRequest {
     pub operation: Operation,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValidateOperationResponse {
     pub prevalidator: PrevalidatorWrapper,
     pub result: ValidateOperationResult,
@@ -172,7 +172,7 @@ pub struct ValidateOperationResponse {
 pub type OperationProtocolDataJson = String;
 pub type ErrorListJson = String;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct OperationProtocolDataJsonWithErrorListJson {
     pub protocol_data_json: OperationProtocolDataJson,
     pub error_json: ErrorListJson,
@@ -215,7 +215,7 @@ impl fmt::Debug for Applied {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Errored {
     pub hash: OperationHash,
     pub is_endorsement: Option<bool>,
@@ -239,7 +239,7 @@ impl fmt::Debug for Errored {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct ValidateOperationResult {
     pub applied: Vec<Applied>,
     pub refused: Vec<Errored>,
