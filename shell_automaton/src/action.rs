@@ -59,6 +59,7 @@ use crate::peers::graylist::{
     PeersGraylistIpRemoveAction, PeersGraylistIpRemovedAction,
 };
 use crate::peers::remove::PeersRemoveAction;
+use crate::prechecker::{PrecheckerDecodeOperationAction, PrecheckerEndorsementValidationReadyAction, PrecheckerEndorsingRightsReadyAction, PrecheckerErrorAction, PrecheckerGetEndorsingRightsAction, PrecheckerOperationDecodedAction, PrecheckerPrecheckOperationAction, PrecheckerValidateEndorsementAction};
 use crate::protocol::ProtocolAction;
 
 use crate::rights::{
@@ -270,6 +271,17 @@ pub enum Action {
     MempoolBroadcastDone(MempoolBroadcastDoneAction),
     MempoolCleanupWaitPrevalidator(MempoolCleanupWaitPrevalidatorAction),
     BlockApplied(BlockAppliedAction),
+
+
+    PrecheckerPrecheckOperation(PrecheckerPrecheckOperationAction),
+    PrecheckerDecodeOperation(PrecheckerDecodeOperationAction),
+    PrecheckerOperationDecoded(PrecheckerOperationDecodedAction),
+    PrecheckerGetEndorsingRights(PrecheckerGetEndorsingRightsAction),
+    PrecheckerEndorsingRightsReady(PrecheckerEndorsingRightsReadyAction),
+    PrecheckerValidateEndorsement(PrecheckerValidateEndorsementAction),
+    PrecheckerEndorsementValidationReady(PrecheckerEndorsementValidationReadyAction),
+    PrecheckerError(PrecheckerErrorAction),
+
 
     RightsGetEndorsingRights(RightsGetEndorsingRightsAction),
     RightsEndorsingRightsGetBlockHeader(RightsEndorsingRightsGetBlockHeaderAction),
