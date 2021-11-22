@@ -2937,8 +2937,8 @@ volumes:
 
 trigger:
   branch:
-    - master
-    - develop
+    - x_master
+    - x_develop
 
 depends_on:
   - build-tezedge-binaries
@@ -3252,8 +3252,8 @@ volumes:
 
 trigger:
   branch:
-    - master
-    - develop
+    - x_master
+    - x_develop
 
 depends_on:
   - build-tezedge-binaries
@@ -5747,8 +5747,8 @@ name: perf/bootstrap-time-009-florence
 
 trigger:
   branch:
-    - master
-    - develop
+    - x_master
+    - x_develop
 
 depends_on:
   - build-tezedge-binaries
@@ -6525,8 +6525,8 @@ depends_on:
 
 trigger:
   branch:
-    - master
-    - develop
+    - x_master
+    - x_develop
 
 volumes:
   - name: snapshots
@@ -6726,8 +6726,8 @@ depends_on:
 
 trigger:
   branch:
-    - master
-    - develop
+    - x_master
+    - x_develop
 
 volumes:
   - name: snapshots
