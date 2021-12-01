@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use redux_rs::Store;
-use slog::error;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use tezos_messages::p2p::encoding::{
     current_head::CurrentHeadMessage,
@@ -14,8 +13,14 @@ use tezos_messages::p2p::encoding::{
 
 use tezos_api::ffi::{BeginConstructionRequest, ValidateOperationRequest};
 
-use crate::{peer::message::{read::PeerMessageReadSuccessAction, write::PeerMessageWriteInitAction}, prechecker::{PrecheckerPrecheckOperationRequestAction, PrecheckerPrecheckOperationResponse, PrecheckerPrecheckOperationResponseAction}};
 use crate::protocol::ProtocolAction;
+use crate::{
+    peer::message::{read::PeerMessageReadSuccessAction, write::PeerMessageWriteInitAction},
+    prechecker::{
+        PrecheckerPrecheckOperationRequestAction, PrecheckerPrecheckOperationResponse,
+        PrecheckerPrecheckOperationResponseAction,
+    },
+};
 use crate::{
     service::{ProtocolService, RpcService},
     Action, ActionWithMeta, Service, State,
@@ -30,18 +35,22 @@ use super::{
         MempoolCleanupWaitPrevalidatorAction,
     },
     mempool_state::HeadState,
+    MempoolRpcEndorsementsStatusGetAction,
 };
 
-pub fn mempool_effects<S>(
-    store: &mut Store<State, S, Action>,
-    action: &ActionWithMeta,
-) where
+pub fn mempool_effects<S>(store: &mut Store<State, S, Action>, action: &ActionWithMeta)
+where
     S: Service,
 {
     // println!("{:#?}", action);
     if store.state().config.disable_mempool {
-        if let Action::MempoolOperationInject(MempoolOperationInjectAction { rpc_id, .. }) = &action.action {
-            store.service().rpc().respond(rpc_id.clone(), serde_json::Value::String("mempool disabled".to_string()));
+        if let Action::MempoolOperationInject(MempoolOperationInjectAction { rpc_id, .. }) =
+            &action.action
+        {
+            store.service().rpc().respond(
+                rpc_id.clone(),
+                serde_json::Value::String("mempool disabled".to_string()),
+            );
         }
         return;
     }
@@ -87,21 +96,17 @@ pub fn mempool_effects<S>(
                         chain_id: current_head.chain_id().clone(),
                         current_block: current_head.current_block_header().clone(),
                     };
-                    store.dispatch(
-                        MempoolRecvDoneAction {
-                            address: *address,
-                            head_state,
-                            message,
-                        },
-                    );
+                    store.dispatch(MempoolRecvDoneAction {
+                        address: *address,
+                        head_state,
+                        message,
+                    });
                 }
                 PeerMessage::Operation(ref op) => {
-                    store.dispatch(
-                        MempoolOperationRecvDoneAction {
-                            address: *address,
-                            operation: op.clone().into(),
-                        },
-                    );
+                    store.dispatch(MempoolOperationRecvDoneAction {
+                        address: *address,
+                        operation: op.clone().into(),
+                    });
                 }
                 PeerMessage::GetOperations(ref hashes) => {
                     for hash in hashes.get_operations() {
@@ -112,12 +117,10 @@ pub fn mempool_effects<S>(
 
                         if let Some(op) = op {
                             let message = OperationMessage::from(op.clone());
-                            store.dispatch(
-                                PeerMessageWriteInitAction {
-                                    address: *address,
-                                    message: message.into(),
-                                },
-                            );
+                            store.dispatch(PeerMessageWriteInitAction {
+                                address: *address,
+                                message: message.into(),
+                            });
                         }
                     }
                 }
@@ -125,7 +128,9 @@ pub fn mempool_effects<S>(
             }
         }
         Action::BlockApplied(BlockAppliedAction {
-            chain_id, block, is_bootstrapped,
+            chain_id,
+            block,
+            is_bootstrapped,
         }) => {
             if *is_bootstrapped {
                 let req = BeginConstructionRequest {
@@ -163,11 +168,7 @@ pub fn mempool_effects<S>(
                 .begin_construction_for_mempool(req);
             if let Some(peer) = store.state().mempool.peer_state.get(address) {
                 if !peer.requesting_full_content.is_empty() {
-                    store.dispatch(
-                        MempoolGetOperationsAction {
-                            address: *address,
-                        },
-                    );
+                    store.dispatch(MempoolGetOperationsAction { address: *address });
                 } else {
                     // if this mempool doesn't introduce new operations, we have nothing to do
                 }
@@ -176,31 +177,25 @@ pub fn mempool_effects<S>(
         Action::MempoolGetOperations(MempoolGetOperationsAction { address }) => {
             if let Some(peer) = store.state().mempool.peer_state.get(address) {
                 let ops = peer.requesting_full_content.iter().cloned().collect();
-                store.dispatch(
-                    MempoolGetOperationsPendingAction {
-                        address: *address,
-                    },
-                );
-                store.dispatch(
-                    PeerMessageWriteInitAction {
-                        address: *address,
-                        message: Arc::new(GetOperationsMessage::new(ops).into()),
-                    },
-                );
+                store.dispatch(MempoolGetOperationsPendingAction { address: *address });
+                store.dispatch(PeerMessageWriteInitAction {
+                    address: *address,
+                    message: Arc::new(GetOperationsMessage::new(ops).into()),
+                });
             }
         }
         Action::MempoolOperationRecvDone(MempoolOperationRecvDoneAction { operation, .. })
         | Action::MempoolOperationInject(MempoolOperationInjectAction { operation, .. }) => {
-            store.dispatch(
-                PrecheckerPrecheckOperationRequestAction {
-                    operation: operation.clone(),
-                },
-            );
+            store.dispatch(PrecheckerPrecheckOperationRequestAction {
+                operation: operation.clone(),
+            });
         }
-        Action::PrecheckerPrecheckOperationResponse(PrecheckerPrecheckOperationResponseAction { response }) => {
+        Action::PrecheckerPrecheckOperationResponse(
+            PrecheckerPrecheckOperationResponseAction { response },
+        ) => {
             match response {
-                PrecheckerPrecheckOperationResponse::Applied(_) |
-                PrecheckerPrecheckOperationResponse::Refused(_) => {
+                PrecheckerPrecheckOperationResponse::Applied(_)
+                | PrecheckerPrecheckOperationResponse::Refused(_) => {
                     store.dispatch(MempoolBroadcastAction {});
                     // respond
                     let resp = if store.state().mempool.local_head_state.is_some() {
@@ -221,12 +216,10 @@ pub fn mempool_effects<S>(
                     store.dispatch(MempoolRpcRespondAction {});
                 }
                 PrecheckerPrecheckOperationResponse::Prevalidate(operation) => {
-                    store.dispatch(
-                        MempoolValidateStartAction {
-                            operation: operation.clone(),
-                        },
-                    );
-                },
+                    store.dispatch(MempoolValidateStartAction {
+                        operation: operation.clone(),
+                    });
+                }
                 _ => (),
             }
         }
@@ -242,7 +235,9 @@ pub fn mempool_effects<S>(
                     .protocol()
                     .validate_operation_for_mempool(validate_req);
             } else {
-                store.dispatch(MempoolValidateWaitPrevalidatorAction { operation: operation.clone() });
+                store.dispatch(MempoolValidateWaitPrevalidatorAction {
+                    operation: operation.clone(),
+                });
             }
         }
         Action::MempoolBroadcast(MempoolBroadcastAction {}) => {
@@ -292,19 +287,50 @@ pub fn mempool_effects<S>(
                 );
                 let message = Arc::new(PeerMessageResponse::from(message));
 
-                store.dispatch(
-                    PeerMessageWriteInitAction {
-                        address,
-                        message: message.clone(),
-                    },
-                );
-                store.dispatch(
-                    MempoolBroadcastDoneAction {
-                        address,
-                        pending,
-                        known_valid,
-                    },
-                );
+                store.dispatch(PeerMessageWriteInitAction {
+                    address,
+                    message: message.clone(),
+                });
+                store.dispatch(MempoolBroadcastDoneAction {
+                    address,
+                    pending,
+                    known_valid,
+                });
+            }
+        }
+
+        Action::MempoolRpcEndorsementsStatusGet(MempoolRpcEndorsementsStatusGetAction {
+            rpc_id,
+            block_hash,
+        }) => {
+            if store.state.get().mempool.head_hash() == Some(block_hash) {
+                let status = &store
+                    .state
+                    .get()
+                    .mempool
+                    .operations_state
+                    .iter()
+                    .filter_map(|(op, state)| {
+                        if let Some(slot) = state.endorsement_slot() {
+                            let mut json = match serde_json::to_value(state) {
+                                Ok(v) => v,
+                                Err(_) => return None,
+                            };
+                            let json_obj = json.as_object_mut()?;
+                            let _ = json_obj.remove("protocol_data")?;
+                            json_obj.insert("slot".to_string(), slot.clone());
+                            Some((op, json))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                store.service.rpc().respond(*rpc_id, status);
+            } else {
+                store
+                    .service
+                    .rpc()
+                    .respond(*rpc_id, serde_json::json!({"error": "non-current block"}));
             }
         }
         _ => (),
