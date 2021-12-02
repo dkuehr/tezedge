@@ -23,6 +23,8 @@ pub enum EndorsementValidationError {
     WrongEndorsementPredecessor,
     #[error("Invalid endorsement level")]
     InvalidLevel,
+    #[error("Invalid endorsement branch")]
+    InvalidBranch,
     #[error("Non-endorement operation")]
     InvalidContents,
     #[error("Unwrapped endorsement is not supported")]

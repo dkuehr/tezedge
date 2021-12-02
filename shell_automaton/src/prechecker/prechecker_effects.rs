@@ -5,14 +5,11 @@ use std::convert::TryInto;
 
 use crypto::{blake2b, hash::BlockHash};
 use slog::{debug, error};
-use tezos_messages::p2p::{
-    binary_message::{BinaryWrite, MessageHash, MessageHashError},
-    encoding::block_header::BlockHeader,
-};
+use tezos_messages::p2p::binary_message::{BinaryWrite, MessageHash};
 
 use crate::{
     mempool::{BlockAppliedAction, MempoolOperationPrecheckedAction},
-    prechecker::{Applied, CurrentBlock, PrecheckerEndorsementValidationRefusedAction, Refused},
+    prechecker::{Applied, PrecheckerEndorsementValidationRefusedAction, Refused},
     rights::{
         EndorsingRightsKey, RightsEndorsingRightsErrorAction, RightsEndorsingRightsReadyAction,
         RightsGetEndorsingRightsAction,
@@ -21,14 +18,13 @@ use crate::{
 };
 
 use super::{
-    EndorsementValidationError, Key, OperationDecodedContents, PrecheckerBlockAppliedAction,
-    PrecheckerCacheAppliedBlockAction, PrecheckerDecodeOperationAction,
+    EndorsementValidationError, Key, OperationDecodedContents, PrecheckerDecodeOperationAction,
     PrecheckerEndorsementValidationAppliedAction, PrecheckerEndorsingRightsReadyAction,
     PrecheckerError, PrecheckerErrorAction, PrecheckerGetEndorsingRightsAction,
     PrecheckerOperation, PrecheckerOperationDecodedAction, PrecheckerOperationState,
     PrecheckerPrecheckOperationInitAction, PrecheckerPrecheckOperationRequestAction,
     PrecheckerPrecheckOperationResponseAction, PrecheckerProtocolNeededAction,
-    PrecheckerValidateEndorsementAction, PrecheckerWaitForBlockApplicationAction,
+    PrecheckerValidateEndorsementAction,
 };
 
 pub fn prechecker_effects<S>(store: &mut Store<S>, action: &ActionWithMeta)
@@ -39,65 +35,22 @@ where
     let prechecker_state_operations = &prechecker_state.operations;
     let log = &store.state.get().log;
     match &action.action {
+        // debug only
         Action::BlockApplied(BlockAppliedAction {
             block,
-            chain_id,
             is_bootstrapped,
-        }) => {
-            let block_hash = match get_block_hash(&block) {
-                Ok(block_hash) => block_hash,
-                Err(err) => {
-                    error!(log, "Cannot cache applied block at level {}", block.level(); "error" => err.to_string());
-                    return;
-                }
+            ..
+        }) if *is_bootstrapped => {
+            let block_hash = if let Ok(v) = block.message_typed_hash::<BlockHash>() {
+                v
+            } else {
+                return;
             };
-
             debug!(log, "New block applied"; "block_hash" => block_hash.to_base58_check());
 
-            store.dispatch(PrecheckerCacheAppliedBlockAction {
-                block_hash: block_hash.clone(),
-                chain_id: chain_id.clone(),
-                block_header: block.clone(),
-            });
-
-            if !is_bootstrapped {
-                return;
-            }
-
-            for key in &store
-                .state
-                .get()
-                .prechecker
-                .operations
-                .iter()
-                .filter_map(|(key, state)| {
-                    if let PrecheckerOperationState::PendingBlockApplication { level, .. } =
-                        state.state
-                    {
-                        if level == block.level() {
-                            Some(key)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .cloned()
-                .collect::<Vec<_>>()
-            {
-                store.dispatch(PrecheckerBlockAppliedAction { key: key.clone() });
-            }
-        }
-
-        // debug only
-        Action::PrecheckerCacheAppliedBlock(PrecheckerCacheAppliedBlockAction {
-            block_hash,
-            ..
-        }) => {
             for (key, op) in prechecker_state
                 .non_terminals()
-                .filter(|(_, state)| state.operation.branch() != block_hash)
+                .filter(|(_, state)| state.operation.branch() != &block_hash)
             {
                 debug!(log, "Prevalidator operation still unprocessed";
                            "operation" => key.operation.to_base58_check(), "state" => op.state.as_ref(), "block_hash" => op.block_hash().to_base58_check());
@@ -192,53 +145,7 @@ where
             }
         }
         Action::PrecheckerOperationDecoded(PrecheckerOperationDecodedAction { key, .. }) => {
-            if let Some(PrecheckerOperationState::DecodedContentReady {
-                operation_decoded_contents,
-                ..
-            }) = prechecker_state_operations.get(key).map(|op| &op.state)
-            {
-                if let Some(level) = operation_decoded_contents.endorsement_level() {
-                    if let Some(current_level) = prechecker_state
-                        .current_block
-                        .as_ref()
-                        .map(|cb| cb.block_header.level())
-                    {
-                        if level == current_level || level == current_level + 1 {
-                            store.dispatch(PrecheckerWaitForBlockApplicationAction {
-                                key: key.clone(),
-                                level,
-                            });
-                        } else {
-                            let protocol_data = operation_decoded_contents.as_json();
-                            store.dispatch(PrecheckerEndorsementValidationRefusedAction {
-                                key: key.clone(),
-                                error: EndorsementValidationError::InvalidLevel,
-                                protocol_data: protocol_data.to_string(),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        Action::PrecheckerWaitForBlockApplication(PrecheckerWaitForBlockApplicationAction {
-            key,
-            level,
-        }) => {
-            if let Some(PrecheckerOperationState::PendingBlockApplication { .. }) =
-                prechecker_state_operations.get(key).map(|op| &op.state)
-            {
-                if prechecker_state
-                    .current_block
-                    .as_ref()
-                    .map(|cb| cb.block_header.level() == *level)
-                    .unwrap_or(false)
-                {
-                    store.dispatch(PrecheckerBlockAppliedAction { key: key.clone() });
-                }
-            }
-        }
-        Action::PrecheckerBlockApplied(PrecheckerBlockAppliedAction { key }) => {
-            if let Some(PrecheckerOperationState::BlockApplied { .. }) =
+            if let Some(PrecheckerOperationState::DecodedContentReady { .. }) =
                 prechecker_state_operations.get(key).map(|op| &op.state)
             {
                 store.dispatch(PrecheckerGetEndorsingRightsAction { key: key.clone() });
@@ -251,10 +158,13 @@ where
                 ..
             }) = prechecker_state_operations.get(key).map(|op| &op.state)
             {
-                if let Some(current_block_hash) = prechecker_state
-                    .current_block
+                if let Some(current_block_hash) = store
+                    .state
+                    .get()
+                    .mempool
+                    .local_head_state
                     .as_ref()
-                    .map(|cb| &cb.block_hash)
+                    .map(|local_head_state| &local_head_state.block_hash)
                 {
                     if let Some(level) = operation_decoded_contents.endorsement_level() {
                         let current_block_hash = current_block_hash.clone();
@@ -352,15 +262,25 @@ where
                 ..
             }) = prechecker_state_operations.get(key)
             {
-                let (chain_id, block_hash) =
-                    match store.state.get().prechecker.current_block.as_ref() {
-                        Some(CurrentBlock {
-                            chain_id,
-                            block_hash,
-                            ..
-                        }) => (chain_id, block_hash),
-                        _ => return,
-                    };
+                let block_hash = operation_decoded_contents.branch();
+                let chain_id = match store
+                    .state
+                    .get()
+                    .mempool
+                    .current_heads
+                    .get(operation_decoded_contents.branch())
+                {
+                    Some(current_head) => &current_head.chain_id,
+                    None => {
+                        let protocol_data = operation_decoded_contents.as_json().to_string();
+                        store.dispatch(PrecheckerEndorsementValidationRefusedAction {
+                            key: key.clone(),
+                            protocol_data,
+                            error: EndorsementValidationError::InvalidBranch,
+                        });
+                        return;
+                    }
+                };
                 use super::EndorsementValidator;
                 let validation_result = match operation_decoded_contents {
                     OperationDecodedContents::Proto010(operation) => operation
@@ -457,14 +377,4 @@ where
         }
         _ => (),
     }
-}
-
-fn get_block_hash(block_header: &BlockHeader) -> Result<BlockHash, MessageHashError> {
-    let block_hash: BlockHash = if let Some(hash) = block_header.hash().as_ref() {
-        hash.as_slice().try_into()?
-    } else {
-        block_header.message_hash()?.try_into()?
-    };
-
-    Ok(block_hash)
 }

@@ -142,10 +142,13 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         if latest_head.level == head_state.current_block.level() {
                             warn!(state.log, "======== different block on the same level"; "level" => latest_head.level);
                         } else {
-                            if latest_head.level + 1 != head_state.current_block.level() {
-                                warn!(state.log, "======== jumping over blocks"; "old_level" => latest_head.level, "new_level" => head_state.current_block.level());
+                            if latest_head.level < head_state.current_block.level() {
+                                if latest_head.level + 1 != head_state.current_block.level() {
+                                    warn!(state.log, "======== jumping over blocks"; "old_level" => latest_head.level, "new_level" => head_state.current_block.level());
+                                }
+                                mempool_state.latest_current_head =
+                                    Some(head_state.block_hash.clone());
                             }
-                            mempool_state.latest_current_head = Some(head_state.block_hash.clone());
                         }
                     }
                 }
