@@ -64,17 +64,17 @@ pub struct Applied {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Refused {
-    pub protocol_data: String,
+    pub protocol_data: serde_json::Value,
     pub error: EndorsementValidationError,
 }
 
 impl Refused {
-    fn new<E>(protocol_data: &str, error: E) -> Self
+    fn new<E>(protocol_data: serde_json::Value, error: E) -> Self
     where
         E: Into<EndorsementValidationError>,
     {
         Self {
-            protocol_data: protocol_data.to_string(),
+            protocol_data,
             error: error.into(),
         }
     }
@@ -133,7 +133,7 @@ impl EndorsementValidator for tezos_messages::protocol::proto_010::operation::Op
 
         let start = Instant::now();
 
-        let refused = |error| Err(Refused::new(&self.as_json().to_string(), error));
+        let refused = |error| Err(Refused::new(self.as_json(), error));
 
         let contents = if self.contents.len() == 1 {
             &self.contents[0]

@@ -8,7 +8,7 @@ use slog::{debug, error};
 use tezos_messages::p2p::binary_message::{BinaryWrite, MessageHash};
 
 use crate::{
-    mempool::{BlockAppliedAction, MempoolOperationPrecheckedAction},
+    mempool::{BlockAppliedAction, MempoolOperationDecodedAction},
     prechecker::{Applied, PrecheckerEndorsementValidationRefusedAction, Refused},
     rights::{
         EndorsingRightsKey, RightsEndorsingRightsErrorAction, RightsEndorsingRightsReadyAction,
@@ -129,14 +129,11 @@ where
             {
                 // TODO use proper protocol to parse operation
                 match OperationDecodedContents::parse(&operation_binary_encoding) {
-                    Ok(contents) if contents.is_endorsement() => {
+                    Ok(contents) => {
                         store.dispatch(PrecheckerOperationDecodedAction {
                             key: key.clone(),
                             contents,
                         });
-                    }
-                    Ok(_) => {
-                        store.dispatch(PrecheckerProtocolNeededAction { key: key.clone() });
                     }
                     Err(err) => {
                         store.dispatch(PrecheckerErrorAction::new(key.clone(), err));
@@ -145,10 +142,28 @@ where
             }
         }
         Action::PrecheckerOperationDecoded(PrecheckerOperationDecodedAction { key, .. }) => {
-            if let Some(PrecheckerOperationState::DecodedContentReady { .. }) =
-                prechecker_state_operations.get(key).map(|op| &op.state)
+            if let Some(PrecheckerOperationState::DecodedContentReady {
+                operation_decoded_contents,
+                ..
+            }) = prechecker_state_operations.get(key).map(|op| &op.state)
             {
-                store.dispatch(PrecheckerGetEndorsingRightsAction { key: key.clone() });
+                let is_endorsement = operation_decoded_contents.is_endorsement();
+                let protocol_data = operation_decoded_contents.as_json();
+
+                if !is_endorsement {
+                    debug!(log, "not an endorsement!"; "operation" => serde_json::to_string_pretty(&protocol_data).unwrap());
+                }
+
+                store.dispatch(MempoolOperationDecodedAction {
+                    operation: key.operation.clone(),
+                    protocol_data,
+                });
+
+                if !is_endorsement {
+                    store.dispatch(PrecheckerProtocolNeededAction { key: key.clone() });
+                } else {
+                    store.dispatch(PrecheckerGetEndorsingRightsAction { key: key.clone() });
+                }
             }
         }
 
@@ -272,7 +287,7 @@ where
                 {
                     Some(current_head) => &current_head.chain_id,
                     None => {
-                        let protocol_data = operation_decoded_contents.as_json().to_string();
+                        let protocol_data = operation_decoded_contents.as_json();
                         store.dispatch(PrecheckerEndorsementValidationRefusedAction {
                             key: key.clone(),
                             protocol_data,
@@ -295,14 +310,9 @@ where
 
                 match validation_result {
                     Ok(Applied { protocol_data }) => {
-                        let protocol_data_as_string = protocol_data.to_string();
                         store.dispatch(PrecheckerEndorsementValidationAppliedAction {
                             key: key.clone(),
-                            protocol_data: protocol_data_as_string,
-                        });
-                        store.dispatch(MempoolOperationPrecheckedAction {
-                            operation: key.operation.clone(),
-                            protocol_data,
+                            protocol_data: protocol_data.clone(),
                         });
                     }
                     Err(Refused {

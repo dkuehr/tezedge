@@ -100,10 +100,32 @@ pub struct PeerState {
 #[serde(tag = "state", rename_all = "lowercase")]
 pub enum OperationState {
     Received {
+        branch: BlockHash,
+        block_time: u64,
+        receive_time: u64,
+    },
+    Decoded {
+        branch: BlockHash,
+        protocol_data: serde_json::Value,
         block_time: u64,
         receive_time: u64,
     },
     Prechecked {
+        branch: BlockHash,
+        protocol_data: serde_json::Value,
+        block_time: u64,
+        receive_time: u64,
+        precheck_time: u64,
+    },
+    PrecheckRefused {
+        branch: BlockHash,
+        protocol_data: serde_json::Value,
+        block_time: u64,
+        receive_time: u64,
+        precheck_time: u64,
+    },
+    ProtocolNeeded {
+        branch: BlockHash,
         protocol_data: serde_json::Value,
         block_time: u64,
         receive_time: u64,
@@ -134,16 +156,18 @@ impl OperationState {
         }
     }
 
-    pub(super) fn branch(&self) -> Option<BlockHash> {
-        self.protocol_data()?
-            .as_object()?
-            .get("branch")?
-            .as_str()
-            .and_then(|str| BlockHash::from_base58_check(&str).map_or(None, Some))
+    pub(super) fn branch(&self) -> &BlockHash {
+        match self {
+            OperationState::Received { branch, .. }
+            | OperationState::Decoded { branch, .. }
+            | OperationState::Prechecked { branch, .. }
+            | OperationState::PrecheckRefused { branch, .. }
+            | OperationState::ProtocolNeeded { branch, .. } => branch,
+        }
     }
 
     pub(super) fn for_branch(&self, branch: &BlockHash) -> bool {
-        self.branch().map(|b| &b == branch).unwrap_or(false)
+        self.branch() == branch
     }
 
     pub(super) fn endorsement_slot(&self) -> Option<&serde_json::Value> {
