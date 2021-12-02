@@ -6,7 +6,7 @@ use std::{collections::HashMap, convert::TryFrom};
 use crypto::{
     base58::FromBase58CheckError,
     blake2b::Blake2bError,
-    hash::{BlockHash, ChainId, FromBytesError, HashBase58, OperationHash, Signature},
+    hash::{BlockHash, ChainId, FromBytesError, OperationHash, Signature},
 };
 use redux_rs::ActionId;
 use tezos_encoding::{binary_reader::BinaryReaderError, binary_writer::BinaryWriterError};
@@ -51,7 +51,6 @@ impl std::fmt::Display for Key {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct PrecheckerState {
     pub operations: HashMap<Key, PrecheckerOperation>,
-    pub current_block: Option<CurrentBlock>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -112,14 +111,6 @@ pub enum PrecheckerOperationState {
     PendingContentDecoding,
     DecodedContentReady {
         operation_decoded_contents: OperationDecodedContents,
-    },
-    PendingBlockApplication {
-        operation_decoded_contents: OperationDecodedContents,
-        level: Level,
-    },
-    BlockApplied {
-        operation_decoded_contents: OperationDecodedContents,
-        level: Level,
     },
     PendingEndorsingRights {
         operation_decoded_contents: OperationDecodedContents,
@@ -210,6 +201,12 @@ impl OperationDecodedContents {
         Ok(Self::Proto010(decoded))
     }
 
+    pub(super) fn branch(&self) -> &BlockHash {
+        match self {
+            OperationDecodedContents::Proto010(op) => &op.branch.0,
+        }
+    }
+
     pub(super) fn is_endorsement(&self) -> bool {
         match self {
             OperationDecodedContents::Proto010(operation) if operation.contents.len() == 1 => match operation.contents[0] {
@@ -225,26 +222,6 @@ impl OperationDecodedContents {
         match self {
             OperationDecodedContents::Proto010(operation) => operation.as_json(),
         }
-    }
-}
-
-impl PrecheckerState {
-    pub fn operations_for_block(
-        &self,
-        block_hash: Option<BlockHash>,
-    ) -> HashMap<HashBase58<OperationHash>, PrecheckerOperationState> {
-        let block_hash = if let Some(block_hash) = block_hash.as_ref() {
-            block_hash
-        } else if let Some(current) = &self.current_block {
-            &current.block_hash
-        } else {
-            return HashMap::default();
-        };
-        self.operations
-            .iter()
-            .filter(|(_, op)| op.operation.branch() == block_hash)
-            .map(|(key, op)| (key.operation.clone().into(), op.state.clone()))
-            .collect()
     }
 }
 

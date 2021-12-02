@@ -312,18 +312,8 @@ where
             block_hash,
         }) => {
             let block_hash = match (block_hash, &store.state.get().mempool.latest_current_head) {
-                (Some(h1), Some(h2)) if h1 != h2 => {
-                    store.service.rpc().respond(
-                        *rpc_id,
-                        serde_json::json!({
-                            "error":
-                                format!("non-current block, current is `{}`", h2.to_base58_check())
-                        }),
-                    );
-                    return;
-                }
-                (Some(h1), _) => h1,
                 (None, Some(h2)) => h2,
+                (Some(h1), _) => h1,
                 _ => {
                     store.service.rpc().respond(
                         *rpc_id,

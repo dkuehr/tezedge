@@ -7,30 +7,17 @@ use slog::{debug, error};
 use crate::{Action, State};
 
 use super::{
-    CurrentBlock, PrecheckerBlockAppliedAction, PrecheckerCacheAppliedBlockAction,
     PrecheckerDecodeOperationAction, PrecheckerEndorsementValidationAppliedAction,
     PrecheckerEndorsementValidationRefusedAction, PrecheckerEndorsingRightsReadyAction,
     PrecheckerErrorAction, PrecheckerGetEndorsingRightsAction, PrecheckerOperation,
     PrecheckerOperationDecodedAction, PrecheckerOperationState,
     PrecheckerPrecheckOperationInitAction, PrecheckerProtocolNeededAction,
-    PrecheckerValidateEndorsementAction, PrecheckerWaitForBlockApplicationAction,
+    PrecheckerValidateEndorsementAction,
 };
 
 pub fn prechecker_reducer(state: &mut State, action: &ActionWithMeta) {
     let prechecker_state = &mut state.prechecker;
     match &action.action {
-        Action::PrecheckerCacheAppliedBlock(PrecheckerCacheAppliedBlockAction {
-            block_hash,
-            chain_id,
-            block_header,
-        }) => {
-            prechecker_state.current_block = Some(CurrentBlock {
-                chain_id: chain_id.clone(),
-                block_hash: block_hash.clone(),
-                block_header: block_header.clone(),
-            })
-        }
-
         Action::PrecheckerPrecheckOperationInit(PrecheckerPrecheckOperationInitAction {
             key,
             operation,
@@ -69,50 +56,13 @@ pub fn prechecker_reducer(state: &mut State, action: &ActionWithMeta) {
                     }
                 });
         }
-        Action::PrecheckerWaitForBlockApplication(PrecheckerWaitForBlockApplicationAction {
-            key,
-            level,
-        }) => {
+        Action::PrecheckerGetEndorsingRights(PrecheckerGetEndorsingRightsAction { key }) => {
             prechecker_state
                 .operations
                 .entry(key.clone())
                 .and_modify(|state| {
                     if let PrecheckerOperationState::DecodedContentReady {
                         operation_decoded_contents,
-                    } = &state.state
-                    {
-                        state.state = PrecheckerOperationState::PendingBlockApplication {
-                            operation_decoded_contents: operation_decoded_contents.clone(),
-                            level: *level,
-                        };
-                    }
-                });
-        }
-        Action::PrecheckerBlockApplied(PrecheckerBlockAppliedAction { key, .. }) => {
-            prechecker_state
-                .operations
-                .entry(key.clone())
-                .and_modify(|state| {
-                    if let PrecheckerOperationState::PendingBlockApplication {
-                        operation_decoded_contents,
-                        level,
-                    } = &state.state
-                    {
-                        state.state = PrecheckerOperationState::BlockApplied {
-                            operation_decoded_contents: operation_decoded_contents.clone(),
-                            level: *level,
-                        }
-                    }
-                });
-        }
-        Action::PrecheckerGetEndorsingRights(PrecheckerGetEndorsingRightsAction { key }) => {
-            prechecker_state
-                .operations
-                .entry(key.clone())
-                .and_modify(|state| {
-                    if let PrecheckerOperationState::BlockApplied {
-                        operation_decoded_contents,
-                        ..
                     } = &state.state
                     {
                         state.state = PrecheckerOperationState::PendingEndorsingRights {
