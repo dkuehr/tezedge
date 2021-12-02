@@ -1554,19 +1554,6 @@ steps:
     - mkdir -p $log_dir && echo "Logs are place on $${PYTHON_LOGS_SERVER_ADDRESS} - $${PYTHON_LOGS_SERVER_PATH}}"
     - poetry run pytest -s --log-dir=$log_dir tests$${TEST_PROTO_DIR_SUFFIX}/test_many_nodes.py
 
-- name: test-multinode
-  image: tezedge/tezedge-ci-builder:nightly-2021-08-04-v10.3-tezos
-  pull: if-not-exists
-  user: root
-  environment:
-    SODIUM_USE_PKG_CONFIG: 1
-    RUST_BACKTRACE: 1
-  commands:
-    - cd tezos-src/tezos/tests_python
-    - log_dir=/drone/src/python-test-logs/$${DRONE_STEP_NAME}_logs
-    - mkdir -p $log_dir && echo "Logs are place on $${PYTHON_LOGS_SERVER_ADDRESS} - $${PYTHON_LOGS_SERVER_PATH}}"
-    - poetry run pytest -s --log-dir=$log_dir tests$${TEST_PROTO_DIR_SUFFIX}/test_multinode.py
-
 - name: mempool-test
   image: tezedge/tezedge-ci-builder:nightly-2021-08-04-v10.3-tezos
   pull: if-not-exists
