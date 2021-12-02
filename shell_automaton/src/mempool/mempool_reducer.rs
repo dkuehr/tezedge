@@ -1,8 +1,9 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use crypto::hash::BlockHash;
-use slog::debug;
+use std::convert::TryInto;
+
+use slog::{debug, error, warn};
 use tezos_messages::p2p::binary_message::MessageHash;
 
 use crate::mempool::mempool_state::OperationState;
@@ -12,10 +13,12 @@ use crate::prechecker::{
 use crate::protocol::ProtocolAction;
 use crate::{Action, ActionWithMeta, State};
 
+use super::mempool_state::MempoolCurrentHead;
 use super::{
-    BlockAppliedAction, HeadState, MempoolBroadcastDoneAction, MempoolGetOperationsPendingAction,
+    BlockAppliedAction, HeadState, MempoolBroadcastDoneAction,
+    MempoolCleanupWaitPrevalidatorAction, MempoolGetOperationsPendingAction,
     MempoolOperationInjectAction, MempoolOperationPrecheckedAction, MempoolOperationRecvDoneAction,
-    MempoolRecvDoneAction, MempoolRpcRespondAction, MempoolValidateWaitPrevalidatorAction, MempoolCleanupWaitPrevalidatorAction,
+    MempoolRecvDoneAction, MempoolRpcRespondAction, MempoolValidateWaitPrevalidatorAction,
 };
 
 pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
@@ -101,52 +104,65 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
         Action::BlockApplied(BlockAppliedAction {
             chain_id, block, ..
         }) => {
-            debug!(&state.log, "======== block applied");
-            match block.message_typed_hash::<BlockHash>() {
-                Ok(hash) => {
-                    let time = mempool_state.current_head_timestamp.map(|id| format!("{:?}", action.id.duration_since(id))).unwrap_or("<nan>".to_string());
-                    debug!(&state.log, "======== block applied"; "hash" => hash.to_string(), "time" => time);
-                    mempool_state.local_head_state = Some((
-                        HeadState {
-                            chain_id: chain_id.clone(),
-                            current_block: block.clone(),
-                        },
-                        hash.clone(),
-                    ));
-                    mempool_state.applied_block.insert(hash);
-                }
+            let head_state = match HeadState::new(chain_id.clone(), block.clone()) {
+                Ok(v) => v,
                 Err(err) => {
-                    // TODO(vlad): unwrap
-                    let _ = err;
+                    error!(&state.log, "Cannot calculate block header hash"; "error" => err.to_string());
+                    return;
                 }
+            };
+            mempool_state
+                .applied_block
+                .insert(head_state.block_hash.clone());
+            if let Some(current_head) = mempool_state.current_heads.get(&head_state.block_hash) {
+                let time = action.id.duration_since(current_head.stamp);
+                debug!(&state.log, "======== new block applied"; "hash" => head_state.block_hash.to_string(), "time" => format!("{:?}", time));
             }
+            mempool_state.local_head_state = Some(head_state);
         }
         Action::MempoolRecvDone(MempoolRecvDoneAction {
             address,
             message,
             head_state,
         }) => {
-            // this is a new block
-            if mempool_state
-                .local_head_state
-                .as_ref()
-                .map(|(head, _)| head.current_block.level() != head_state.current_block.level())
-                .unwrap_or(false)
-            {
-                debug!(&state.log, "======== new current head"; "hash" => head_state.current_block.message_typed_hash::<BlockHash>().as_ref().map(BlockHash::to_base58_check).unwrap_or("<>".to_string()));
-                mempool_state.local_head_state = None;
-                mempool_state.operations_state.clear();
-                mempool_state.current_head_timestamp = Some(action.id);
-                mempool_state.new_current_head = head_state.current_block.message_typed_hash::<BlockHash>().map_or(None, Some);
+            let log = state.log.clone();
+            mempool_state
+                .current_heads
+                .entry(head_state.block_hash.clone().into())
+                .or_insert_with(|| {
+                    debug!(log, "======== new block received"; "hash" => head_state.block_hash.to_string());
+                    MempoolCurrentHead::new(head_state, action.id)})
+                .peers
+                .insert(*address);
+
+            match &mempool_state.latest_current_head {
+                Some(latest) if latest == &head_state.block_hash => (),
+                Some(latest) => {
+                    if let Some(latest_head) = mempool_state.current_heads.get(latest) {
+                        if latest_head.level == head_state.current_block.level() {
+                            warn!(state.log, "======== different block on the same level"; "level" => latest_head.level);
+                        } else {
+                            if latest_head.level + 1 != head_state.current_block.level() {
+                                warn!(state.log, "======== jumping over blocks"; "old_level" => latest_head.level, "new_level" => head_state.current_block.level());
+                            }
+                            mempool_state.latest_current_head = Some(head_state.block_hash.clone());
+                        }
+                    }
+                }
+                _ => {
+                    mempool_state.latest_current_head = Some(head_state.block_hash.clone());
+                }
             }
 
             let pending = message.pending().iter().cloned();
             let known_valid = message.known_valid().iter().cloned();
 
-            let block_time = match mempool_state.head_timestamp() {
-                Some(v) => v,
-                None => return,
-            };
+            let block_time = head_state
+                .current_block
+                .timestamp()
+                .try_into()
+                .map(|t: u64| t * 1_000_000_000)
+                .unwrap_or(action.id.into());
 
             let peer = mempool_state.peer_state.entry(*address).or_default();
             for hash in pending.chain(known_valid) {
@@ -156,11 +172,12 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                     peer.requesting_full_content.insert(hash.clone());
                     // of course peer knows about it, because he sent us it
                     peer.seen_operations.insert(hash.clone());
+
                     mempool_state.operations_state.insert(
                         hash.into(),
                         OperationState::Received {
-                            receive_time: (action.time_as_nanos() - block_time * 1_000_000_000)
-                                / 1_000_000_000,
+                            block_time,
+                            receive_time: action.time_as_nanos() - block_time,
                         },
                     );
                 }
@@ -207,46 +224,52 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
             operation,
         }) => {
             // TODO(vlad): hash
-            mempool_state.wait_prevalidator_operations.push(operation.clone());
+            mempool_state
+                .wait_prevalidator_operations
+                .push(operation.clone());
         }
         Action::MempoolCleanupWaitPrevalidator(MempoolCleanupWaitPrevalidatorAction {}) => {
             mempool_state.wait_prevalidator_operations.clear();
         }
-        Action::PrecheckerPrecheckOperationResponse(PrecheckerPrecheckOperationResponseAction { response }) =>
-            match response {
-                PrecheckerPrecheckOperationResponse::Applied(applied) => {
-                    if let Some(op) = mempool_state.pending_operations.remove(&applied.hash) {
-                        mempool_state
-                            .validated_operations
-                            .ops
-                            .insert(applied.hash.clone().into(), op);
-                        mempool_state.validated_operations.applied.push(applied.clone());
-                    }
-                    if let Some(rpc_id) = mempool_state.injecting_rpc_ids.remove(&applied.hash) {
-                        mempool_state
-                            .injected_rpc_ids
-                            .insert(applied.hash.clone().into(), rpc_id);
-                    }
+        Action::PrecheckerPrecheckOperationResponse(
+            PrecheckerPrecheckOperationResponseAction { response },
+        ) => match response {
+            PrecheckerPrecheckOperationResponse::Applied(applied) => {
+                if let Some(op) = mempool_state.pending_operations.remove(&applied.hash) {
+                    mempool_state
+                        .validated_operations
+                        .ops
+                        .insert(applied.hash.clone().into(), op);
+                    mempool_state
+                        .validated_operations
+                        .applied
+                        .push(applied.clone());
                 }
-                PrecheckerPrecheckOperationResponse::Refused(errored) => {
-                    if let Some(op) = mempool_state.pending_operations.remove(&errored.hash) {
-                        mempool_state
-                            .validated_operations
-                            .refused_ops
-                            .insert(errored.hash.clone().into(), op);
-                        mempool_state
-                            .validated_operations
-                            .refused
-                            .push(errored.clone());
-                    }
-                    if let Some(rpc_id) = mempool_state.injecting_rpc_ids.remove(&errored.hash) {
-                        mempool_state
-                            .injected_rpc_ids
-                            .insert(errored.hash.clone().into(), rpc_id);
-                    }
+                if let Some(rpc_id) = mempool_state.injecting_rpc_ids.remove(&applied.hash) {
+                    mempool_state
+                        .injected_rpc_ids
+                        .insert(applied.hash.clone().into(), rpc_id);
                 }
-                _ => (),
-            },
+            }
+            PrecheckerPrecheckOperationResponse::Refused(errored) => {
+                if let Some(op) = mempool_state.pending_operations.remove(&errored.hash) {
+                    mempool_state
+                        .validated_operations
+                        .refused_ops
+                        .insert(errored.hash.clone().into(), op);
+                    mempool_state
+                        .validated_operations
+                        .refused
+                        .push(errored.clone());
+                }
+                if let Some(rpc_id) = mempool_state.injecting_rpc_ids.remove(&errored.hash) {
+                    mempool_state
+                        .injected_rpc_ids
+                        .insert(errored.hash.clone().into(), rpc_id);
+                }
+            }
+            _ => (),
+        },
         Action::MempoolRpcRespond(MempoolRpcRespondAction {}) => {
             state.mempool.injected_rpc_ids.clear();
         }
@@ -265,17 +288,17 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
             operation,
             protocol_data,
         }) => {
-            let block_time = match mempool_state.head_timestamp() {
-                Some(v) => v,
-                None => return,
-            };
             if let Some(operation_state) = mempool_state.operations_state.get_mut(operation) {
-                if let OperationState::Received { ref receive_time } = operation_state {
+                if let OperationState::Received {
+                    ref receive_time,
+                    block_time,
+                } = operation_state
+                {
                     *operation_state = OperationState::Prechecked {
                         protocol_data: protocol_data.clone(),
+                        block_time: *block_time,
                         receive_time: *receive_time,
-                        precheck_time: (action.time_as_nanos() - block_time * 1_000_000_000)
-                            / 1_000_000_000,
+                        precheck_time: action.time_as_nanos() - *block_time,
                     };
                 }
             }

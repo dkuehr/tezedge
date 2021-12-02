@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shell_automaton::mempool::HeadState;
 use shell_automaton::service::rpc_service::RpcResponse as RpcShellAutomatonMsg;
 use slog::{info, warn};
 
@@ -70,7 +71,10 @@ pub async fn get_pending_operations(
                     .filter_map(|applied| {
                         // TODO(vlad): unwrap
                         let branch = ops.get(&applied.hash).unwrap().branch();
-                        if let Some((_, hash)) = current_head {
+                        if let Some(HeadState {
+                            block_hash: hash, ..
+                        }) = current_head
+                        {
                             if branch.ne(hash) {
                                 return None;
                             }
@@ -110,7 +114,9 @@ pub async fn get_pending_operations(
                     {
                         HashMap::new()
                     } else {
-                        serde_json::from_str(&v.protocol_data_json_with_error_json.protocol_data_json)?
+                        serde_json::from_str(
+                            &v.protocol_data_json_with_error_json.protocol_data_json,
+                        )?
                     };
 
                     let error = if v.protocol_data_json_with_error_json.error_json.is_empty() {
@@ -120,7 +126,10 @@ pub async fn get_pending_operations(
                     };
 
                     let mut m = HashMap::new();
-                    m.insert(String::from("protocol"), Value::String(prevalidator.protocol.to_base58_check()));
+                    m.insert(
+                        String::from("protocol"),
+                        Value::String(prevalidator.protocol.to_base58_check()),
+                    );
                     m.insert(
                         String::from("branch"),
                         Value::String(operation.branch().to_base58_check()),
@@ -135,7 +144,8 @@ pub async fn get_pending_operations(
                 result
             },
             branch_refused: {
-                let mut result = Vec::with_capacity(state.validated_operations.branch_refused.len());
+                let mut result =
+                    Vec::with_capacity(state.validated_operations.branch_refused.len());
                 for v in &state.validated_operations.branch_refused {
                     let operation_hash = v.hash.to_base58_check();
                     let operation = match ops.get(&v.hash) {
@@ -156,7 +166,9 @@ pub async fn get_pending_operations(
                     {
                         HashMap::new()
                     } else {
-                        serde_json::from_str(&v.protocol_data_json_with_error_json.protocol_data_json)?
+                        serde_json::from_str(
+                            &v.protocol_data_json_with_error_json.protocol_data_json,
+                        )?
                     };
 
                     let error = if v.protocol_data_json_with_error_json.error_json.is_empty() {
@@ -166,7 +178,10 @@ pub async fn get_pending_operations(
                     };
 
                     let mut m = HashMap::new();
-                    m.insert(String::from("protocol"), Value::String(prevalidator.protocol.to_base58_check()));
+                    m.insert(
+                        String::from("protocol"),
+                        Value::String(prevalidator.protocol.to_base58_check()),
+                    );
                     m.insert(
                         String::from("branch"),
                         Value::String(operation.branch().to_base58_check()),
@@ -181,7 +196,8 @@ pub async fn get_pending_operations(
                 result
             },
             branch_delayed: {
-                let mut result = Vec::with_capacity(state.validated_operations.branch_delayed.len());
+                let mut result =
+                    Vec::with_capacity(state.validated_operations.branch_delayed.len());
                 for v in &state.validated_operations.branch_delayed {
                     let operation_hash = v.hash.to_base58_check();
                     let operation = match ops.get(&v.hash) {
@@ -202,7 +218,9 @@ pub async fn get_pending_operations(
                     {
                         HashMap::new()
                     } else {
-                        serde_json::from_str(&v.protocol_data_json_with_error_json.protocol_data_json)?
+                        serde_json::from_str(
+                            &v.protocol_data_json_with_error_json.protocol_data_json,
+                        )?
                     };
 
                     let error = if v.protocol_data_json_with_error_json.error_json.is_empty() {
@@ -212,7 +230,10 @@ pub async fn get_pending_operations(
                     };
 
                     let mut m = HashMap::new();
-                    m.insert(String::from("protocol"), Value::String(prevalidator.protocol.to_base58_check()));
+                    m.insert(
+                        String::from("protocol"),
+                        Value::String(prevalidator.protocol.to_base58_check()),
+                    );
                     m.insert(
                         String::from("branch"),
                         Value::String(operation.branch().to_base58_check()),
@@ -394,15 +415,13 @@ pub async fn inject_operation(
     match result {
         Ok(Ok(serde_json::Value::Null)) => (),
         Ok(Ok(serde_json::Value::String(reason))) => {
-            return Err(RpcServiceError::UnexpectedError {
-                reason,
-            });
-        },
+            return Err(RpcServiceError::UnexpectedError { reason });
+        }
         Ok(Ok(resp)) => {
             return Err(RpcServiceError::UnexpectedError {
                 reason: resp.to_string(),
             });
-        },
+        }
         Ok(Err(_)) => warn!(
             env.log(),
             "Operation injection, state machine failed to respond"

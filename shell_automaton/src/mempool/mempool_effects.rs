@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use redux_rs::Store;
+use slog::error;
 use std::{collections::BTreeMap, sync::Arc};
 
 use tezos_messages::p2p::encoding::{
@@ -29,10 +30,10 @@ use crate::{
 use super::{
     mempool_actions::{
         BlockAppliedAction, MempoolBroadcastAction, MempoolBroadcastDoneAction,
-        MempoolGetOperationsAction, MempoolGetOperationsPendingAction,
-        MempoolOperationInjectAction, MempoolOperationRecvDoneAction, MempoolRecvDoneAction,
-        MempoolRpcRespondAction, MempoolValidateStartAction, MempoolValidateWaitPrevalidatorAction,
-        MempoolCleanupWaitPrevalidatorAction,
+        MempoolCleanupWaitPrevalidatorAction, MempoolGetOperationsAction,
+        MempoolGetOperationsPendingAction, MempoolOperationInjectAction,
+        MempoolOperationRecvDoneAction, MempoolRecvDoneAction, MempoolRpcRespondAction,
+        MempoolValidateStartAction, MempoolValidateWaitPrevalidatorAction,
     },
     mempool_state::HeadState,
     MempoolRpcEndorsementsStatusGetAction,
@@ -92,9 +93,15 @@ where
             match message.message() {
                 PeerMessage::CurrentHead(ref current_head) => {
                     let message = current_head.current_mempool().clone();
-                    let head_state = HeadState {
-                        chain_id: current_head.chain_id().clone(),
-                        current_block: current_head.current_block_header().clone(),
+                    let head_state = match HeadState::new(
+                        current_head.chain_id().clone(),
+                        current_head.current_block_header().clone(),
+                    ) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            error!(&store.state.get().log, "Cannot calculate block header hash"; "error" => err.to_string());
+                            return;
+                        }
                     };
                     store.dispatch(MempoolRecvDoneAction {
                         address: *address,
@@ -241,7 +248,7 @@ where
             }
         }
         Action::MempoolBroadcast(MempoolBroadcastAction {}) => {
-            let (head_state, head_hash) = match store.state().mempool.local_head_state.clone() {
+            let head_state = match store.state().mempool.local_head_state.clone() {
                 Some(v) => v,
                 None => {
                     // should always have current head here
@@ -249,6 +256,7 @@ where
                     return;
                 }
             };
+            let head_hash = head_state.block_hash;
             let addresses = store.state().peers.iter_addr().cloned().collect::<Vec<_>>();
             // TODO(vlad): add action removing peer_state for disconnected peers
             for address in addresses {
@@ -303,7 +311,7 @@ where
             rpc_id,
             block_hash,
         }) => {
-            match (block_hash, store.state.get().mempool.head_hash()) {
+            let block_hash = match (block_hash, &store.state.get().mempool.latest_current_head) {
                 (Some(h1), Some(h2)) if h1 != h2 => {
                     store.service.rpc().respond(
                         *rpc_id,
@@ -312,15 +320,27 @@ where
                                 format!("non-current block, current is `{}`", h2.to_base58_check())
                         }),
                     );
+                    return;
                 }
-                _ => (),
-            }
+                (Some(h1), _) => h1,
+                (None, Some(h2)) => h2,
+                _ => {
+                    store.service.rpc().respond(
+                        *rpc_id,
+                        serde_json::json!({
+                            "error": format!("no current block, no block requested")
+                        }),
+                    );
+                    return;
+                }
+            };
             let status = &store
                 .state
                 .get()
                 .mempool
                 .operations_state
                 .iter()
+                .filter(|(_, state)| state.for_branch(block_hash))
                 .filter_map(|(op, state)| {
                     if let Some(slot) = state.endorsement_slot() {
                         let mut json = match serde_json::to_value(state) {

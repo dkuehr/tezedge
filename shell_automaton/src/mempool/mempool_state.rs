@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    convert::TryInto,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     net::SocketAddr,
 };
 
@@ -12,7 +11,13 @@ use serde::{Deserialize, Serialize};
 
 use crypto::hash::{BlockHash, ChainId, HashBase58, OperationHash};
 use tezos_api::ffi::{Applied, Errored, PrevalidatorWrapper};
-use tezos_messages::p2p::encoding::{block_header::BlockHeader, operation::Operation};
+use tezos_messages::p2p::{
+    binary_message::{MessageHash, MessageHashError},
+    encoding::{
+        block_header::{BlockHeader, Level},
+        operation::Operation,
+    },
+};
 
 use crate::service::rpc_service::RpcId;
 
@@ -31,7 +36,7 @@ pub struct MempoolState {
     // performed rpc
     pub(super) injected_rpc_ids: HashMap<HashBase58<OperationHash>, RpcId>,
     // the current head applied
-    pub local_head_state: Option<(HeadState, BlockHash)>,
+    pub local_head_state: Option<HeadState>,
     // let's track what our peers know, and what we waiting from them
     pub(super) peer_state: HashMap<SocketAddr, PeerState>,
     // operations that passed basic checks, sent to protocol validator
@@ -42,8 +47,8 @@ pub struct MempoolState {
 
     pub operations_state: BTreeMap<HashBase58<OperationHash>, OperationState>,
 
-    pub current_head_timestamp: Option<ActionId>,
-    pub new_current_head: Option<BlockHash>,
+    pub current_heads: BTreeMap<HashBase58<BlockHash>, MempoolCurrentHead>,
+    pub latest_current_head: Option<BlockHash>,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
@@ -63,7 +68,22 @@ pub struct ValidatedOperations {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HeadState {
     pub chain_id: ChainId,
+    pub block_hash: BlockHash,
     pub current_block: BlockHeader,
+}
+
+impl HeadState {
+    pub(super) fn new(
+        chain_id: ChainId,
+        current_block: BlockHeader,
+    ) -> Result<Self, MessageHashError> {
+        let block_hash = current_block.message_typed_hash::<BlockHash>()?;
+        Ok(Self {
+            chain_id,
+            block_hash,
+            current_block,
+        })
+    }
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
@@ -80,10 +100,12 @@ pub struct PeerState {
 #[serde(tag = "state", rename_all = "lowercase")]
 pub enum OperationState {
     Received {
+        block_time: u64,
         receive_time: u64,
     },
     Prechecked {
         protocol_data: serde_json::Value,
+        block_time: u64,
         receive_time: u64,
         precheck_time: u64,
     },
@@ -112,6 +134,18 @@ impl OperationState {
         }
     }
 
+    pub(super) fn branch(&self) -> Option<BlockHash> {
+        self.protocol_data()?
+            .as_object()?
+            .get("branch")?
+            .as_str()
+            .and_then(|str| BlockHash::from_base58_check(&str).map_or(None, Some))
+    }
+
+    pub(super) fn for_branch(&self, branch: &BlockHash) -> bool {
+        self.branch().map(|b| &b == branch).unwrap_or(false)
+    }
+
     pub(super) fn endorsement_slot(&self) -> Option<&serde_json::Value> {
         let contents = self
             .protocol_data()?
@@ -130,13 +164,23 @@ impl OperationState {
     }
 }
 
-impl MempoolState {
-    pub(super) fn head_timestamp(&self) -> Option<u64> {
-        let (HeadState { current_block, .. }, _) = self.local_head_state.as_ref()?;
-        current_block.timestamp().try_into().map_or(None, Some)
-    }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MempoolCurrentHead {
+    pub chain_id: ChainId,
+    pub level: Level,
+    pub predecessor: BlockHash,
+    pub peers: BTreeSet<SocketAddr>,
+    pub stamp: ActionId,
+}
 
-    pub(super) fn head_hash(&self) -> Option<&BlockHash> {
-        self.new_current_head.as_ref()
+impl MempoolCurrentHead {
+    pub(super) fn new(head_state: &HeadState, stamp: ActionId) -> Self {
+        Self {
+            chain_id: head_state.chain_id.clone(),
+            level: head_state.current_block.level(),
+            predecessor: head_state.current_block.predecessor().clone(),
+            peers: BTreeSet::new(),
+            stamp,
+        }
     }
 }
