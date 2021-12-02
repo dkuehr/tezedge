@@ -222,9 +222,9 @@ where
                     }
                     store.dispatch(MempoolRpcRespondAction {});
                 }
-                PrecheckerPrecheckOperationResponse::Prevalidate(operation) => {
+                PrecheckerPrecheckOperationResponse::Prevalidate(prevalidate) => {
                     store.dispatch(MempoolValidateStartAction {
-                        operation: operation.clone(),
+                        operation: prevalidate.operation.clone(),
                     });
                 }
                 _ => (),
@@ -339,6 +339,7 @@ where
                         };
                         let json_obj = json.as_object_mut()?;
                         let _ = json_obj.remove("protocol_data")?;
+                        json_obj.remove("branch");
                         json_obj.insert("slot".to_string(), slot.clone());
                         Some((op, json))
                     } else {

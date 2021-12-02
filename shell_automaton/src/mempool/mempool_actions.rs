@@ -176,12 +176,12 @@ impl EnablingCondition<State> for BlockAppliedAction {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MempoolOperationPrecheckedAction {
+pub struct MempoolOperationDecodedAction {
     pub operation: OperationHash,
     pub protocol_data: serde_json::Value,
 }
 
-impl EnablingCondition<State> for MempoolOperationPrecheckedAction {
+impl EnablingCondition<State> for MempoolOperationDecodedAction {
     fn is_enabled(&self, _state: &State) -> bool {
         true
     }

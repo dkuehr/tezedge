@@ -155,7 +155,7 @@ pub fn prechecker_reducer(state: &mut State, action: &ActionWithMeta) {
                 .entry(key.clone())
                 .and_modify(|state| {
                     match &state.state {
-                        PrecheckerOperationState::PendingContentDecoding { .. } => {
+                        PrecheckerOperationState::DecodedContentReady { .. } => {
                             debug!(log, ">>> Prechecking cannot be performed (not an endorsement)"; "operation" => key.operation.to_string(), "duration" => format!("{:?}", action.id.duration_since(state.start)));
                             state.state = PrecheckerOperationState::ProtocolNeeded;
                         }

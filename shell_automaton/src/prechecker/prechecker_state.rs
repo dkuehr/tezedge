@@ -124,10 +124,10 @@ pub enum PrecheckerOperationState {
         endorsing_rights: EndorsingRights,
     },
     Applied {
-        protocol_data: String,
+        protocol_data: serde_json::Value,
     },
     Refused {
-        protocol_data: String,
+        protocol_data: serde_json::Value,
         error: EndorsementValidationError,
     },
     ProtocolNeeded,

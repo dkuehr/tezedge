@@ -40,20 +40,71 @@ impl EnablingCondition<State> for PrecheckerPrecheckOperationResponseAction {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum PrecheckerPrecheckOperationResponse {
     /// The operation can be applied.
-    Applied(Applied),
+    Applied(PrecheckerApplied),
     /// The operation cannot be applied.
-    Refused(Errored),
+    Refused(PrecheckerErrored),
     /// Prechecker cannot decide if the operation is correct. Protocol based prevalidator is needed.
-    Prevalidate(Operation),
-    /// Errro occurred while prechecking the operation.
+    Prevalidate(PrecheckerPrevalidate),
+    /// Error occurred while prechecking the operation.
     Error(PrecheckerResponseError),
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PrecheckerApplied {
+    pub hash: OperationHash,
+    pub protocol_data: serde_json::Value,
+}
+
+impl PrecheckerApplied {
+    pub fn as_applied(&self) -> Applied {
+        Applied {
+            hash: self.hash.clone(),
+            protocol_data_json: self.protocol_data.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PrecheckerErrored {
+    pub hash: OperationHash,
+    pub protocol_data: serde_json::Value,
+    pub error: String,
+}
+
+impl PrecheckerErrored {
+    pub fn is_endorsement(&self) -> Option<bool> {
+        Some(
+            match self.protocol_data.as_object()?.get("kind")?.as_str()? {
+                "endorsement" | "endorsement_with_slot" => true,
+                _ => false,
+            },
+        )
+    }
+
+    pub fn as_errored(&self) -> Errored {
+        Errored {
+            hash: self.hash.clone(),
+            is_endorsement: self.is_endorsement(),
+            protocol_data_json_with_error_json: OperationProtocolDataJsonWithErrorListJson {
+                protocol_data_json: self.protocol_data.to_string(),
+                error_json: self.error.clone(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PrecheckerPrevalidate {
+    pub hash: OperationHash,
+    pub operation: Operation,
+    pub protocol_data: serde_json::Value,
+}
+
 impl PrecheckerPrecheckOperationResponseAction {
-    pub(super) fn valid(operation_hash: &OperationHash, json: String) -> Self {
-        let applied = Applied {
+    pub(super) fn valid(operation_hash: &OperationHash, protocol_data: serde_json::Value) -> Self {
+        let applied = PrecheckerApplied {
             hash: operation_hash.clone(),
-            protocol_data_json: json,
+            protocol_data,
         };
         Self {
             response: PrecheckerPrecheckOperationResponse::Applied(applied),
@@ -62,16 +113,13 @@ impl PrecheckerPrecheckOperationResponseAction {
 
     pub(super) fn reject(
         operation_hash: &OperationHash,
-        protocol_data: String,
+        protocol_data: serde_json::Value,
         error: String,
     ) -> Self {
-        let errored = Errored {
+        let errored = PrecheckerErrored {
             hash: operation_hash.clone(),
-            is_endorsement: Some(true),
-            protocol_data_json_with_error_json: OperationProtocolDataJsonWithErrorListJson {
-                error_json: error,
-                protocol_data_json: protocol_data,
-            },
+            error,
+            protocol_data,
         };
         Self {
             response: PrecheckerPrecheckOperationResponse::Refused(errored),
@@ -79,9 +127,17 @@ impl PrecheckerPrecheckOperationResponseAction {
     }
 
     #[allow(dead_code)]
-    pub(super) fn prevalidate(operation: &Operation) -> Self {
+    pub(super) fn prevalidate(
+        operation_hash: &OperationHash,
+        operation: &Operation,
+        protocol_data: &serde_json::Value,
+    ) -> Self {
         Self {
-            response: PrecheckerPrecheckOperationResponse::Prevalidate(operation.clone()),
+            response: PrecheckerPrecheckOperationResponse::Prevalidate(PrecheckerPrevalidate {
+                hash: operation_hash.clone(),
+                protocol_data: protocol_data.clone(),
+                operation: operation.clone(),
+            }),
         }
     }
 
@@ -143,13 +199,13 @@ pub struct PrecheckerValidateEndorsementAction {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PrecheckerEndorsementValidationAppliedAction {
     pub key: Key,
-    pub protocol_data: String,
+    pub protocol_data: serde_json::Value,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PrecheckerEndorsementValidationRefusedAction {
     pub key: Key,
-    pub protocol_data: String,
+    pub protocol_data: serde_json::Value,
     pub error: EndorsementValidationError,
 }
 
