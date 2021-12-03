@@ -19,7 +19,7 @@ use tezos_messages::p2p::{
     },
 };
 
-use crate::service::rpc_service::RpcId;
+use crate::{service::rpc_service::RpcId, ActionWithMeta};
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct MempoolState {
@@ -45,7 +45,7 @@ pub struct MempoolState {
     pub(super) wait_prevalidator_operations: Vec<Operation>,
     pub validated_operations: ValidatedOperations,
 
-    pub operations_state: BTreeMap<HashBase58<OperationHash>, OperationState>,
+    pub operations_state: BTreeMap<HashBase58<OperationHash>, MempoolOperation>,
 
     pub current_heads: BTreeMap<HashBase58<BlockHash>, MempoolCurrentHead>,
     pub latest_current_head: Option<BlockHash>,
@@ -96,83 +96,83 @@ pub struct PeerState {
     pub(super) seen_operations: HashSet<OperationHash>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "state", rename_all = "lowercase")]
-pub enum OperationState {
-    Received {
-        branch: BlockHash,
-        block_time: u64,
-        receive_time: u64,
-    },
-    Decoded {
-        branch: BlockHash,
-        protocol_data: serde_json::Value,
-        block_time: u64,
-        receive_time: u64,
-    },
-    Prechecked {
-        branch: BlockHash,
-        protocol_data: serde_json::Value,
-        block_time: u64,
-        receive_time: u64,
-        precheck_time: u64,
-    },
-    PrecheckRefused {
-        branch: BlockHash,
-        protocol_data: serde_json::Value,
-        block_time: u64,
-        receive_time: u64,
-        precheck_time: u64,
-    },
-    ProtocolNeeded {
-        branch: BlockHash,
-        protocol_data: serde_json::Value,
-        block_time: u64,
-        receive_time: u64,
-        precheck_time: u64,
-    },
-    /* TODO
-    Prevalidated {
-        protocol_data: serde_json::Value,
-        receive_time: u64,
-        precheck_time: u64,
-        prevalidate_time: u64,
-    },
-    Broadcast {
-        protocol_data: serde_json::Value,
-        receive_time: u64,
-        precheck_time: u64,
-        prevalidate_time: u64,
-        broadcast_time: u64,
-    }
-    */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MempoolOperation {
+    pub branch: BlockHash,
+    pub block_time: u64,
+    #[serde(flatten)]
+    pub times: HashMap<String, u64>,
+    //#[serde(flatten)]
+    pub state: OperationState,
+    pub protocol_data: Option<serde_json::Value>,
 }
 
-impl OperationState {
-    pub(super) fn protocol_data(&self) -> Option<&serde_json::Value> {
-        match self {
-            OperationState::Prechecked { protocol_data, .. } => Some(protocol_data),
-            _ => None,
+impl MempoolOperation {
+    pub(super) fn received(
+        branch: &BlockHash,
+        mut block_time: u64,
+        action: &ActionWithMeta,
+    ) -> Self {
+        block_time *= 1_000_000_000;
+        Self {
+            branch: branch.clone(),
+            block_time,
+            protocol_data: None,
+            times: HashMap::from([(
+                "receive_time".to_string(),
+                action.time_as_nanos() - block_time,
+            )]),
+            state: OperationState::Received,
         }
     }
 
-    pub(super) fn branch(&self) -> &BlockHash {
-        match self {
-            OperationState::Received { branch, .. }
-            | OperationState::Decoded { branch, .. }
-            | OperationState::Prechecked { branch, .. }
-            | OperationState::PrecheckRefused { branch, .. }
-            | OperationState::ProtocolNeeded { branch, .. } => branch,
+    pub(super) fn decoded(
+        &self,
+        protocol_data: &serde_json::Value,
+        action: &ActionWithMeta,
+    ) -> Self {
+        let mut times = self.times.clone();
+        times.insert(
+            "decode_time".to_string(),
+            action.time_as_nanos() - self.block_time,
+        );
+        Self {
+            branch: self.branch.clone(),
+            protocol_data: Some(protocol_data.clone()),
+            block_time: self.block_time,
+            times,
+            state: OperationState::Decoded,
+        }
+    }
+
+    pub(super) fn next_state(
+        &self,
+        state: OperationState,
+        name: &str,
+        action: &ActionWithMeta,
+    ) -> Self {
+        let mut times = self.times.clone();
+        times.insert(
+            format!("time_{}", name),
+            action.time_as_nanos() - self.block_time,
+        );
+        Self {
+            branch: self.branch.clone(),
+            protocol_data: self.protocol_data.clone(),
+            block_time: self.block_time,
+            times,
+            state,
         }
     }
 
     pub(super) fn for_branch(&self, branch: &BlockHash) -> bool {
-        self.branch() == branch
+        &self.branch == branch
     }
 
     pub(super) fn endorsement_slot(&self) -> Option<&serde_json::Value> {
         let contents = self
-            .protocol_data()?
+            .protocol_data
+            .as_ref()?
             .as_object()?
             .get("contents")?
             .as_array()?;
@@ -186,6 +186,22 @@ impl OperationState {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperationState {
+    Received,
+    Decoded,
+    Prechecked,
+    PrecheckRefused,
+    BroadcastPrechecked,
+    ProtocolNeeded,
+    Prevalidated,
+    BroadcastPrevalidated,
+    Refused,
+    BranchRefused,
+    BranchDelayed,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

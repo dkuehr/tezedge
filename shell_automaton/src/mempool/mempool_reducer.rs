@@ -13,7 +13,7 @@ use crate::prechecker::{
 use crate::protocol::ProtocolAction;
 use crate::{Action, ActionWithMeta, State};
 
-use super::mempool_state::MempoolCurrentHead;
+use super::mempool_state::{MempoolCurrentHead, MempoolOperation};
 use super::{
     BlockAppliedAction, HeadState, MempoolBroadcastDoneAction,
     MempoolCleanupWaitPrevalidatorAction, MempoolGetOperationsPendingAction,
@@ -47,6 +47,19 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                             .injected_rpc_ids
                             .insert(v.hash.clone().into(), rpc_id);
                     }
+                    if let Some(operation_state) = mempool_state.operations_state.get_mut(&v.hash) {
+                        if let MempoolOperation {
+                            state: OperationState::Decoded,
+                            ..
+                        } = operation_state
+                        {
+                            *operation_state = operation_state.next_state(
+                                OperationState::Prevalidated,
+                                "prevalidate",
+                                action,
+                            );
+                        }
+                    }
                 }
                 for v in &result.result.refused {
                     if let Some(op) = mempool_state.pending_operations.remove(&v.hash) {
@@ -60,6 +73,19 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         mempool_state
                             .injected_rpc_ids
                             .insert(v.hash.clone().into(), rpc_id);
+                    }
+                    if let Some(operation_state) = mempool_state.operations_state.get_mut(&v.hash) {
+                        if let MempoolOperation {
+                            state: OperationState::Decoded,
+                            ..
+                        } = operation_state
+                        {
+                            *operation_state = operation_state.next_state(
+                                OperationState::Refused,
+                                "prevalidate",
+                                action,
+                            );
+                        }
                     }
                 }
                 for v in &result.result.branch_refused {
@@ -78,6 +104,19 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                             .injected_rpc_ids
                             .insert(v.hash.clone().into(), rpc_id);
                     }
+                    if let Some(operation_state) = mempool_state.operations_state.get_mut(&v.hash) {
+                        if let MempoolOperation {
+                            state: OperationState::Decoded,
+                            ..
+                        } = operation_state
+                        {
+                            *operation_state = operation_state.next_state(
+                                OperationState::BranchRefused,
+                                "prevalidate",
+                                action,
+                            );
+                        }
+                    }
                 }
                 for v in &result.result.branch_delayed {
                     if let Some(op) = mempool_state.pending_operations.remove(&v.hash) {
@@ -94,6 +133,19 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         mempool_state
                             .injected_rpc_ids
                             .insert(v.hash.clone().into(), rpc_id);
+                    }
+                    if let Some(operation_state) = mempool_state.operations_state.get_mut(&v.hash) {
+                        if let MempoolOperation {
+                            state: OperationState::Decoded,
+                            ..
+                        } = operation_state
+                        {
+                            *operation_state = operation_state.next_state(
+                                OperationState::BranchDelayed,
+                                "prevalidate",
+                                action,
+                            );
+                        }
                     }
                 }
             }
@@ -164,7 +216,6 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                 .current_block
                 .timestamp()
                 .try_into()
-                .map(|t: u64| t * 1_000_000_000)
                 .unwrap_or(action.id.into());
 
             let peer = mempool_state.peer_state.entry(*address).or_default();
@@ -178,11 +229,7 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
 
                     mempool_state.operations_state.insert(
                         hash.into(),
-                        OperationState::Received {
-                            branch: head_state.block_hash.clone(),
-                            block_time,
-                            receive_time: action.time_as_nanos() - block_time,
-                        },
+                        MempoolOperation::received(&head_state.block_hash, block_time, action),
                     );
                 }
             }
@@ -256,20 +303,16 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         .insert(hash.clone().into(), rpc_id);
                 }
                 if let Some(operation_state) = mempool_state.operations_state.get_mut(hash) {
-                    if let OperationState::Decoded {
-                        branch,
-                        ref receive_time,
-                        block_time,
+                    if let MempoolOperation {
+                        state: OperationState::Decoded,
                         ..
                     } = operation_state
                     {
-                        *operation_state = OperationState::Prechecked {
-                            branch: branch.clone(),
-                            protocol_data: applied.protocol_data.clone(),
-                            block_time: *block_time,
-                            receive_time: *receive_time,
-                            precheck_time: action.time_as_nanos() - *block_time,
-                        };
+                        *operation_state = operation_state.next_state(
+                            OperationState::Prechecked,
+                            "precheck",
+                            action,
+                        );
                     }
                 }
             }
@@ -291,40 +334,33 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         .insert(errored.hash.clone().into(), rpc_id);
                 }
                 if let Some(operation_state) = mempool_state.operations_state.get_mut(hash) {
-                    if let OperationState::Decoded {
-                        branch,
-                        ref receive_time,
-                        block_time,
+                    if let MempoolOperation {
+                        state: OperationState::Decoded,
                         ..
                     } = operation_state
                     {
-                        *operation_state = OperationState::PrecheckRefused {
-                            branch: branch.clone(),
-                            protocol_data: errored.protocol_data.clone(),
-                            block_time: *block_time,
-                            receive_time: *receive_time,
-                            precheck_time: action.time_as_nanos() - *block_time,
-                        };
+                        let next = operation_state.next_state(
+                            OperationState::PrecheckRefused,
+                            "precheck",
+                            action,
+                        );
+                        *operation_state = next;
                     }
                 }
             }
             PrecheckerPrecheckOperationResponse::Prevalidate(prevalidate) => {
                 let hash = &prevalidate.hash;
                 if let Some(operation_state) = mempool_state.operations_state.get_mut(hash) {
-                    if let OperationState::Decoded {
-                        branch,
-                        ref receive_time,
-                        block_time,
+                    if let MempoolOperation {
+                        state: OperationState::Decoded,
                         ..
                     } = operation_state
                     {
-                        *operation_state = OperationState::ProtocolNeeded {
-                            branch: branch.clone(),
-                            protocol_data: prevalidate.protocol_data.clone(),
-                            block_time: *block_time,
-                            receive_time: *receive_time,
-                            precheck_time: action.time_as_nanos() - *block_time,
-                        };
+                        *operation_state = operation_state.next_state(
+                            OperationState::ProtocolNeeded,
+                            "precheck",
+                            action,
+                        );
                     }
                 }
             }
@@ -344,6 +380,32 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
 
             peer.seen_operations.extend(known_valid.iter().cloned());
             peer.seen_operations.extend(pending.iter().cloned());
+
+            for hash in known_valid {
+                if let Some(operation_state) = mempool_state.operations_state.get_mut(hash) {
+                    if let MempoolOperation {
+                        state: OperationState::Prechecked,
+                        ..
+                    } = operation_state
+                    {
+                        *operation_state = operation_state.next_state(
+                            OperationState::BroadcastPrechecked,
+                            "broadcast_prechecked",
+                            action,
+                        );
+                    } else if let MempoolOperation {
+                        state: OperationState::Prevalidated,
+                        ..
+                    } = operation_state
+                    {
+                        *operation_state = operation_state.next_state(
+                            OperationState::BroadcastPrevalidated,
+                            "broadcast_prevalidated",
+                            action,
+                        );
+                    }
+                }
+            }
         }
 
         Action::MempoolOperationDecoded(MempoolOperationDecodedAction {
@@ -351,18 +413,12 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
             protocol_data,
         }) => {
             if let Some(operation_state) = mempool_state.operations_state.get_mut(operation) {
-                if let OperationState::Received {
-                    branch,
-                    ref receive_time,
-                    block_time,
+                if let MempoolOperation {
+                    state: OperationState::Received,
+                    ..
                 } = operation_state
                 {
-                    *operation_state = OperationState::Decoded {
-                        branch: branch.clone(),
-                        protocol_data: protocol_data.clone(),
-                        block_time: *block_time,
-                        receive_time: *receive_time,
-                    };
+                    *operation_state = operation_state.decoded(protocol_data, action);
                 }
             }
         }
