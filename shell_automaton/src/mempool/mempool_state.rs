@@ -113,16 +113,14 @@ impl MempoolOperation {
         mut block_timestamp: u64,
         action: &ActionWithMeta,
     ) -> Self {
+        let state = OperationState::Received;
         block_timestamp *= 1_000_000_000;
         Self {
             branch: branch.clone(),
             block_timestamp,
             protocol_data: None,
-            times: HashMap::from([(
-                "receive_time".to_string(),
-                action.time_as_nanos() - block_timestamp,
-            )]),
-            state: OperationState::Received,
+            times: HashMap::from([(state.time_name(), action.time_as_nanos() - block_timestamp)]),
+            state,
         }
     }
 
@@ -131,9 +129,10 @@ impl MempoolOperation {
         protocol_data: &serde_json::Value,
         action: &ActionWithMeta,
     ) -> Self {
+        let state = OperationState::Decoded;
         let mut times = self.times.clone();
         times.insert(
-            "decode_time".to_string(),
+            state.time_name(),
             action.time_as_nanos() - self.block_timestamp,
         );
         Self {
@@ -141,19 +140,14 @@ impl MempoolOperation {
             protocol_data: Some(protocol_data.clone()),
             block_timestamp: self.block_timestamp,
             times,
-            state: OperationState::Decoded,
+            state,
         }
     }
 
-    pub(super) fn next_state(
-        &self,
-        state: OperationState,
-        name: &str,
-        action: &ActionWithMeta,
-    ) -> Self {
+    pub(super) fn next_state(&self, state: OperationState, action: &ActionWithMeta) -> Self {
         let mut times = self.times.clone();
         times.insert(
-            format!("{}_time", name),
+            state.time_name(),
             action.time_as_nanos() - self.block_timestamp,
         );
         Self {
@@ -188,20 +182,26 @@ impl MempoolOperation {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, strum_macros::Display)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum OperationState {
     Received,
     Decoded,
     Prechecked,
+    Applied,
+    Broadcast,
+
     PrecheckRefused,
-    BroadcastPrechecked,
-    ProtocolNeeded,
-    Prevalidated,
-    BroadcastPrevalidated,
     Refused,
     BranchRefused,
     BranchDelayed,
+}
+
+impl OperationState {
+    fn time_name(&self) -> String {
+        self.to_string() + "_time"
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
