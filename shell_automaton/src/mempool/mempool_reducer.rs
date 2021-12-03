@@ -54,8 +54,7 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         } = operation_state
                         {
                             *operation_state = operation_state.next_state(
-                                OperationState::Prevalidated,
-                                "prevalidate",
+                                OperationState::Applied,
                                 action,
                             );
                         }
@@ -82,7 +81,6 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         {
                             *operation_state = operation_state.next_state(
                                 OperationState::Refused,
-                                "prevalidate",
                                 action,
                             );
                         }
@@ -112,7 +110,6 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         {
                             *operation_state = operation_state.next_state(
                                 OperationState::BranchRefused,
-                                "prevalidate",
                                 action,
                             );
                         }
@@ -142,7 +139,6 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         {
                             *operation_state = operation_state.next_state(
                                 OperationState::BranchDelayed,
-                                "prevalidate",
                                 action,
                             );
                         }
@@ -310,7 +306,6 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                     {
                         *operation_state = operation_state.next_state(
                             OperationState::Prechecked,
-                            "precheck",
                             action,
                         );
                     }
@@ -341,28 +336,14 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                     {
                         let next = operation_state.next_state(
                             OperationState::PrecheckRefused,
-                            "precheck",
                             action,
                         );
                         *operation_state = next;
                     }
                 }
             }
-            PrecheckerPrecheckOperationResponse::Prevalidate(prevalidate) => {
-                let hash = &prevalidate.hash;
-                if let Some(operation_state) = mempool_state.operations_state.get_mut(hash) {
-                    if let MempoolOperation {
-                        state: OperationState::Decoded,
-                        ..
-                    } = operation_state
-                    {
-                        *operation_state = operation_state.next_state(
-                            OperationState::ProtocolNeeded,
-                            "precheck",
-                            action,
-                        );
-                    }
-                }
+            PrecheckerPrecheckOperationResponse::Prevalidate(_) => {
+                // TODO???
             }
             PrecheckerPrecheckOperationResponse::Error(_) => {
                 // TODO
@@ -383,26 +364,21 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
 
             for hash in known_valid {
                 if let Some(operation_state) = mempool_state.operations_state.get_mut(hash) {
-                    if let MempoolOperation {
-                        state: OperationState::Prechecked,
-                        ..
-                    } = operation_state
-                    {
-                        *operation_state = operation_state.next_state(
-                            OperationState::BroadcastPrechecked,
-                            "broadcast_prechecked",
-                            action,
-                        );
-                    } else if let MempoolOperation {
-                        state: OperationState::Prevalidated,
-                        ..
-                    } = operation_state
-                    {
-                        *operation_state = operation_state.next_state(
-                            OperationState::BroadcastPrevalidated,
-                            "broadcast_prevalidated",
-                            action,
-                        );
+                    match operation_state {
+                        MempoolOperation {
+                            state: OperationState::Prechecked,
+                            ..
+                        }
+                        | MempoolOperation {
+                            state: OperationState::Applied,
+                            ..
+                        } => {
+                            *operation_state = operation_state.next_state(
+                                OperationState::Broadcast,
+                                action,
+                            )
+                        }
+                        _ => (),
                     }
                 }
             }
