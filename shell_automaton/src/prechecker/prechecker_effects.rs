@@ -149,6 +149,7 @@ where
             {
                 let is_endorsement = operation_decoded_contents.is_endorsement();
                 let protocol_data = operation_decoded_contents.as_json();
+                let protocol_data_clone = protocol_data.clone();
 
                 store.dispatch(MempoolOperationDecodedAction {
                     operation: key.operation.clone(),
@@ -156,7 +157,10 @@ where
                 });
 
                 if !is_endorsement {
-                    store.dispatch(PrecheckerProtocolNeededAction { key: key.clone() });
+                    store.dispatch(PrecheckerProtocolNeededAction {
+                        key: key.clone(),
+                        protocol_data: protocol_data_clone,
+                    });
                 } else {
                     store.dispatch(PrecheckerGetEndorsingRightsAction { key: key.clone() });
                 }
@@ -312,10 +316,13 @@ where
                         });
                     }
                     Err(Refused {
+                        protocol_data,
                         error: EndorsementValidationError::UnsupportedPublicKey,
-                        ..
                     }) => {
-                        store.dispatch(PrecheckerProtocolNeededAction { key: key.clone() });
+                        store.dispatch(PrecheckerProtocolNeededAction {
+                            key: key.clone(),
+                            protocol_data: protocol_data.clone(),
+                        });
                     }
                     Err(Refused {
                         protocol_data,
@@ -330,6 +337,17 @@ where
                 };
             }
         }
+        Action::PrecheckerProtocolNeeded(PrecheckerProtocolNeededAction { key, protocol_data }) => {
+            if let Some(PrecheckerOperationState::ProtocolNeeded { .. }) =
+                prechecker_state_operations.get(key).map(|op| &op.state)
+            {
+                store.dispatch(PrecheckerPrecheckOperationResponseAction::prevalidate(
+                    &key.operation,
+                    protocol_data,
+                ));
+            }
+        }
+
         Action::PrecheckerEndorsementValidationApplied(
             PrecheckerEndorsementValidationAppliedAction { key, protocol_data },
         ) => {

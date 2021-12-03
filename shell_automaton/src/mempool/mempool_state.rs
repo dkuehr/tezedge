@@ -99,7 +99,7 @@ pub struct PeerState {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MempoolOperation {
     pub branch: BlockHash,
-    pub block_time: u64,
+    pub block_timestamp: u64,
     #[serde(flatten)]
     pub times: HashMap<String, u64>,
     //#[serde(flatten)]
@@ -110,17 +110,17 @@ pub struct MempoolOperation {
 impl MempoolOperation {
     pub(super) fn received(
         branch: &BlockHash,
-        mut block_time: u64,
+        mut block_timestamp: u64,
         action: &ActionWithMeta,
     ) -> Self {
-        block_time *= 1_000_000_000;
+        block_timestamp *= 1_000_000_000;
         Self {
             branch: branch.clone(),
-            block_time,
+            block_timestamp,
             protocol_data: None,
             times: HashMap::from([(
                 "receive_time".to_string(),
-                action.time_as_nanos() - block_time,
+                action.time_as_nanos() - block_timestamp,
             )]),
             state: OperationState::Received,
         }
@@ -134,12 +134,12 @@ impl MempoolOperation {
         let mut times = self.times.clone();
         times.insert(
             "decode_time".to_string(),
-            action.time_as_nanos() - self.block_time,
+            action.time_as_nanos() - self.block_timestamp,
         );
         Self {
             branch: self.branch.clone(),
             protocol_data: Some(protocol_data.clone()),
-            block_time: self.block_time,
+            block_timestamp: self.block_timestamp,
             times,
             state: OperationState::Decoded,
         }
@@ -153,13 +153,13 @@ impl MempoolOperation {
     ) -> Self {
         let mut times = self.times.clone();
         times.insert(
-            format!("time_{}", name),
-            action.time_as_nanos() - self.block_time,
+            format!("{}_time", name),
+            action.time_as_nanos() - self.block_timestamp,
         );
         Self {
             branch: self.branch.clone(),
             protocol_data: self.protocol_data.clone(),
-            block_time: self.block_time,
+            block_timestamp: self.block_timestamp,
             times,
             state,
         }
