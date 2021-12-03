@@ -150,10 +150,6 @@ where
                 let is_endorsement = operation_decoded_contents.is_endorsement();
                 let protocol_data = operation_decoded_contents.as_json();
 
-                if !is_endorsement {
-                    debug!(log, "not an endorsement!"; "operation" => serde_json::to_string_pretty(&protocol_data).unwrap());
-                }
-
                 store.dispatch(MempoolOperationDecodedAction {
                     operation: key.operation.clone(),
                     protocol_data,
