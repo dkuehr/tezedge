@@ -242,9 +242,18 @@ where
                     store.dispatch(MempoolRpcRespondAction {});
                 }
                 PrecheckerPrecheckOperationResponse::Prevalidate(prevalidate) => {
-                    store.dispatch(MempoolValidateStartAction {
-                        operation: prevalidate.operation.clone(),
-                    });
+                    if let Some(operation) = store
+                        .state
+                        .get()
+                        .mempool
+                        .pending_operations
+                        .get(&prevalidate.hash)
+                        .cloned()
+                    {
+                        store.dispatch(MempoolValidateStartAction { operation });
+                    } else {
+                        // TODO
+                    }
                 }
                 _ => (),
             }

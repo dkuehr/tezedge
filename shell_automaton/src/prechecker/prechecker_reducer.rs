@@ -148,7 +148,7 @@ pub fn prechecker_reducer(state: &mut State, action: &ActionWithMeta) {
                     }
                 });
         }
-        Action::PrecheckerProtocolNeeded(PrecheckerProtocolNeededAction { key }) => {
+        Action::PrecheckerProtocolNeeded(PrecheckerProtocolNeededAction { key, .. }) => {
             let log = &state.log;
             prechecker_state
                 .operations

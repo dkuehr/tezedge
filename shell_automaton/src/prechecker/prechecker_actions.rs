@@ -96,7 +96,6 @@ impl PrecheckerErrored {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PrecheckerPrevalidate {
     pub hash: OperationHash,
-    pub operation: Operation,
     pub protocol_data: serde_json::Value,
 }
 
@@ -129,14 +128,12 @@ impl PrecheckerPrecheckOperationResponseAction {
     #[allow(dead_code)]
     pub(super) fn prevalidate(
         operation_hash: &OperationHash,
-        operation: &Operation,
         protocol_data: &serde_json::Value,
     ) -> Self {
         Self {
             response: PrecheckerPrecheckOperationResponse::Prevalidate(PrecheckerPrevalidate {
                 hash: operation_hash.clone(),
                 protocol_data: protocol_data.clone(),
-                operation: operation.clone(),
             }),
         }
     }
@@ -212,6 +209,7 @@ pub struct PrecheckerEndorsementValidationRefusedAction {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PrecheckerProtocolNeededAction {
     pub key: Key,
+    pub protocol_data: serde_json::Value,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
