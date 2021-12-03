@@ -100,11 +100,11 @@ pub struct PeerState {
 pub struct MempoolOperation {
     pub branch: BlockHash,
     pub block_timestamp: u64,
+    pub state: OperationState,
+    pub broadcast: bool,
+    pub protocol_data: Option<serde_json::Value>,
     #[serde(flatten)]
     pub times: HashMap<String, u64>,
-    //#[serde(flatten)]
-    pub state: OperationState,
-    pub protocol_data: Option<serde_json::Value>,
 }
 
 impl MempoolOperation {
@@ -119,8 +119,9 @@ impl MempoolOperation {
             branch: branch.clone(),
             block_timestamp,
             protocol_data: None,
-            times: HashMap::from([(state.time_name(), action.time_as_nanos() - block_timestamp)]),
             state,
+            broadcast: false,
+            times: HashMap::from([(state.time_name(), action.time_as_nanos() - block_timestamp)]),
         }
     }
 
@@ -136,11 +137,10 @@ impl MempoolOperation {
             action.time_as_nanos() - self.block_timestamp,
         );
         Self {
-            branch: self.branch.clone(),
-            protocol_data: Some(protocol_data.clone()),
-            block_timestamp: self.block_timestamp,
             times,
             state,
+            protocol_data: Some(protocol_data.clone()),
+            .. self.clone()
         }
     }
 
@@ -151,11 +151,24 @@ impl MempoolOperation {
             action.time_as_nanos() - self.block_timestamp,
         );
         Self {
-            branch: self.branch.clone(),
-            protocol_data: self.protocol_data.clone(),
-            block_timestamp: self.block_timestamp,
             times,
             state,
+            .. self.clone()
+        }
+    }
+
+    pub(super) fn broadcast(&self, action: &ActionWithMeta) -> Self {
+        let mut times = self.times.clone();
+        if !self.broadcast {
+            times.insert(
+                "broadcast_time".to_string(),
+                action.time_as_nanos() - self.block_timestamp,
+            );
+        }
+        Self {
+            times,
+            broadcast: true,
+            .. self.clone()
         }
     }
 
@@ -182,7 +195,7 @@ impl MempoolOperation {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, strum_macros::Display)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, strum_macros::Display)]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum OperationState {
@@ -190,7 +203,6 @@ pub enum OperationState {
     Decoded,
     Prechecked,
     Applied,
-    Broadcast,
 
     PrecheckRefused,
     Refused,

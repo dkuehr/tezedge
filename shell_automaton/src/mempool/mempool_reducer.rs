@@ -53,10 +53,8 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                             ..
                         } = operation_state
                         {
-                            *operation_state = operation_state.next_state(
-                                OperationState::Applied,
-                                action,
-                            );
+                            *operation_state =
+                                operation_state.next_state(OperationState::Applied, action);
                         }
                     }
                 }
@@ -79,10 +77,8 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                             ..
                         } = operation_state
                         {
-                            *operation_state = operation_state.next_state(
-                                OperationState::Refused,
-                                action,
-                            );
+                            *operation_state =
+                                operation_state.next_state(OperationState::Refused, action);
                         }
                     }
                 }
@@ -108,10 +104,8 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                             ..
                         } = operation_state
                         {
-                            *operation_state = operation_state.next_state(
-                                OperationState::BranchRefused,
-                                action,
-                            );
+                            *operation_state =
+                                operation_state.next_state(OperationState::BranchRefused, action);
                         }
                     }
                 }
@@ -137,10 +131,8 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                             ..
                         } = operation_state
                         {
-                            *operation_state = operation_state.next_state(
-                                OperationState::BranchDelayed,
-                                action,
-                            );
+                            *operation_state =
+                                operation_state.next_state(OperationState::BranchDelayed, action);
                         }
                     }
                 }
@@ -304,10 +296,8 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         ..
                     } = operation_state
                     {
-                        *operation_state = operation_state.next_state(
-                            OperationState::Prechecked,
-                            action,
-                        );
+                        *operation_state =
+                            operation_state.next_state(OperationState::Prechecked, action);
                     }
                 }
             }
@@ -334,10 +324,8 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         ..
                     } = operation_state
                     {
-                        let next = operation_state.next_state(
-                            OperationState::PrecheckRefused,
-                            action,
-                        );
+                        let next =
+                            operation_state.next_state(OperationState::PrecheckRefused, action);
                         *operation_state = next;
                     }
                 }
@@ -372,12 +360,7 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         | MempoolOperation {
                             state: OperationState::Applied,
                             ..
-                        } => {
-                            *operation_state = operation_state.next_state(
-                                OperationState::Broadcast,
-                                action,
-                            )
-                        }
+                        } => *operation_state = operation_state.broadcast(action),
                         _ => (),
                     }
                 }

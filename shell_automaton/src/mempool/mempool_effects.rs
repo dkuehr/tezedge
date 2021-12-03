@@ -1,16 +1,17 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use crypto::{base58::ToBase58Check, hash::OperationHash};
 use redux_rs::Store;
-use slog::error;
+use slog::{debug, error};
 use std::{collections::BTreeMap, sync::Arc};
 
-use tezos_messages::p2p::encoding::{
+use tezos_messages::p2p::{binary_message::MessageHash, encoding::{
     current_head::CurrentHeadMessage,
     mempool::Mempool,
     operation::{GetOperationsMessage, OperationMessage},
     peer::{PeerMessage, PeerMessageResponse},
-};
+}};
 
 use tezos_api::ffi::{BeginConstructionRequest, ValidateOperationRequest};
 
@@ -259,6 +260,9 @@ where
             }
         }
         Action::MempoolValidateStart(MempoolValidateStartAction { operation }) => {
+            if let Ok(hash) = operation.message_typed_hash::<OperationHash>() {
+                debug!(&store.state.get().log, "=== prevalidate"; "operation" => hash.to_base58_check());
+            }
             let mempool_state = &store.state().mempool;
             if let Some(prevalidator) = &mempool_state.prevalidator {
                 let validate_req = ValidateOperationRequest {
