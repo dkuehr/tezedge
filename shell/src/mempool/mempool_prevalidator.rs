@@ -91,6 +91,7 @@ impl MempoolPrevalidator {
                     match tezos_protocol_api.readable_connection_sync() {
                         Ok(mut protocol_controller) => match process_prevalidation(
                             &block_storage,
+                            // TODO: block_meta_storage required for prevalidation params
                             &chain_meta_storage,
                             &current_mempool_state_storage,
                             &chain_id,
@@ -273,6 +274,7 @@ impl<T> From<PoisonError<T>> for PrevalidationError {
 
 fn process_prevalidation(
     block_storage: &BlockStorage,
+    // TODO: block_meta_storage required to obtain prevalidation params
     chain_meta_storage: &ChainMetaStorage,
     current_mempool_state_storage: &CurrentMempoolStateStorageRef,
     chain_id: &ChainId,
@@ -312,6 +314,15 @@ fn process_prevalidation(
                     if process_new_head {
                         debug!(log, "Mempool - new head received, so begin construction a new context"; "received_block_hash" => header.hash.to_base58_check());
 
+                        // TODO: add later to complete prevalidation
+                        // let (predecessor_block_metadata_hash, predecessor_ops_metadata_hash) =
+                        //     match block_meta_storage.get_additional_data(&header.hash)? {
+                        //         Some(block_header_additional_data) => {
+                        //             block_header_additional_data.into()
+                        //         }
+                        //         None => (None, None),
+                        //     };
+
                         // try to begin construction new context
                         let (prevalidator, head) = begin_construction(
                             api,
@@ -319,6 +330,9 @@ fn process_prevalidation(
                             chain_id,
                             header.hash.clone(),
                             header.header.clone(),
+                            // TODO: add later to complete prevalidation
+                            // predecessor_block_metadata_hash,
+                            // predecessor_ops_metadata_hash,
                             log,
                         )?;
 
@@ -434,6 +448,9 @@ fn begin_construction(
     chain_id: &ChainId,
     block_hash: BlockHash,
     block_header: Arc<BlockHeader>,
+    // TODO: add later to complete prevalidation
+    // predecessor_block_metadata_hash: Option<BlockMetadataHash>,
+    // predecessor_ops_metadata_hash: Option<OperationMetadataListListHash>,
     log: &Logger,
 ) -> Result<(Option<PrevalidatorWrapper>, Option<BlockHash>), PrevalidationError> {
     let result = tokio::task::block_in_place(|| {
@@ -442,6 +459,9 @@ fn begin_construction(
                 chain_id: chain_id.clone(),
                 predecessor: block_header.as_ref().clone(),
                 protocol_data: None,
+                // TODO: add later to complete prevalidation
+                // predecessor_block_metadata_hash,
+                // predecessor_ops_metadata_hash,
             }),
         )
     });

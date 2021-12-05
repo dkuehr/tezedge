@@ -272,6 +272,9 @@ impl_to_ocaml_record! {
         chain_id: OCamlChainId,
         predecessor: OCamlBlockHeader => FfiBlockHeader::from(predecessor),
         protocol_data: Option<OCamlBytes>,
+        // TODO: add later to complete prevalidation
+        // predecessor_block_metadata_hash: Option<OCamlBlockMetadataHash>,
+        // predecessor_ops_metadata_hash: Option<OCamlOperationMetadataListListHash>,
     }
 }
 
