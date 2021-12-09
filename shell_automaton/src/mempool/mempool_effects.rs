@@ -145,6 +145,8 @@ where
                     chain_id: chain_id.clone(),
                     predecessor: block.clone(),
                     protocol_data: None,
+                    predecessor_ops_metadata_hash: None,
+                    predecessor_block_metadata_hash: None,
                 };
                 store
                     .service()
@@ -169,6 +171,8 @@ where
                 chain_id: head_state.chain_id.clone(),
                 predecessor: head_state.current_block.clone(),
                 protocol_data: None,
+                predecessor_ops_metadata_hash: None,
+                predecessor_block_metadata_hash: None,
             };
             store
                 .service()
