@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use crate::{ActionWithMeta, mempool::BlockAppliedAction};
+use crate::{mempool::BlockAppliedAction, ActionWithMeta};
 use slog::{debug, error};
 
 use crate::{Action, State};
@@ -18,7 +18,6 @@ use super::{
 pub fn prechecker_reducer(state: &mut State, action: &ActionWithMeta) {
     let prechecker_state = &mut state.prechecker;
     match &action.action {
-
         Action::BlockApplied(BlockAppliedAction { hash, .. }) => {
             prechecker_state.latest_block_hash = Some(hash.clone());
         }

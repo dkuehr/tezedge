@@ -251,7 +251,8 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
             timestamp,
         }) => {
             if let Some(local_head_state) = &mempool_state.local_head_state {
-                if *level == local_head_state.header.level() + 1 { // new current_head
+                if *level == local_head_state.header.level() + 1 {
+                    // new current_head
                     // remove older statuses
                     if let Some((l, _)) = mempool_state.old_operations_state.back() {
                         if *l < level - 20 {
@@ -260,12 +261,12 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                         }
                     }
                     // insert previously current statuses
-                    let old_state = mem::replace(&mut mempool_state.operations_state, BTreeMap::new());
+                    let old_state =
+                        mem::replace(&mut mempool_state.operations_state, BTreeMap::new());
                     if let Some(local_head_state) = &mempool_state.local_head_state {
-                        mempool_state.old_operations_state.push_front((
-                            local_head_state.header.level(),
-                            old_state,
-                        ));
+                        mempool_state
+                            .old_operations_state
+                            .push_front((local_head_state.header.level(), old_state));
                     }
                 }
             }
@@ -276,9 +277,7 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
             let peer = mempool_state.peer_state.entry(*address).or_default();
             let ops = mempool_state.level_to_operation.entry(*level).or_default();
 
-            let block_time = (*timestamp)
-                .try_into()
-                .unwrap_or(action.id.into());
+            let block_time = (*timestamp).try_into().unwrap_or(action.id.into());
 
             for hash in pending.chain(known_valid) {
                 let known = mempool_state.pending_operations.contains_key(&hash)

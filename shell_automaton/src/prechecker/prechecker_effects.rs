@@ -173,12 +173,7 @@ where
                 ..
             }) = prechecker_state_operations.get(key).map(|op| &op.state)
             {
-                if let Some(current_block_hash) = &store
-                    .state
-                    .get()
-                    .prechecker
-                    .latest_block_hash
-                {
+                if let Some(current_block_hash) = &store.state.get().prechecker.latest_block_hash {
                     if let Some(level) = operation_decoded_contents.endorsement_level() {
                         let current_block_hash = current_block_hash.clone();
                         store.dispatch(RightsGetEndorsingRightsAction {
