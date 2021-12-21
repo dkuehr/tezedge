@@ -17,15 +17,7 @@ use crate::{
     Action, ActionWithMeta, Service, Store,
 };
 
-use super::{
-    EndorsementValidationError, Key, OperationDecodedContents, PrecheckerDecodeOperationAction,
-    PrecheckerEndorsementValidationAppliedAction, PrecheckerEndorsingRightsReadyAction,
-    PrecheckerError, PrecheckerErrorAction, PrecheckerGetEndorsingRightsAction,
-    PrecheckerOperation, PrecheckerOperationDecodedAction, PrecheckerOperationState,
-    PrecheckerPrecheckOperationInitAction, PrecheckerPrecheckOperationRequestAction,
-    PrecheckerPrecheckOperationResponseAction, PrecheckerProtocolNeededAction,
-    PrecheckerValidateEndorsementAction,
-};
+use super::{EndorsementValidationError, Key, OperationDecodedContents, PrecheckerDecodeOperationAction, PrecheckerEndorsementValidationAppliedAction, PrecheckerEndorsingRightsReadyAction, PrecheckerError, PrecheckerErrorAction, PrecheckerGetEndorsingRightsAction, PrecheckerOperation, PrecheckerOperationDecodedAction, PrecheckerOperationState, PrecheckerPrecheckOperationInitAction, PrecheckerPrecheckOperationRequestAction, PrecheckerPrecheckOperationResponse, PrecheckerPrecheckOperationResponseAction, PrecheckerPrevalidate, PrecheckerProtocolNeededAction, PrecheckerValidateEndorsementAction};
 
 pub fn prechecker_effects<S>(store: &mut Store<S>, action: &ActionWithMeta)
 where
@@ -85,17 +77,21 @@ where
                     return;
                 }
             };
-            let key = match hash.try_into() {
+            let key = match hash.clone().try_into() {
                 Ok(hash) => Key { operation: hash },
                 Err(err) => {
                     store.dispatch(PrecheckerPrecheckOperationResponseAction::error(err));
                     return;
                 }
             };
-            store.dispatch(PrecheckerPrecheckOperationInitAction {
-                key,
-                operation: operation.clone(),
-                operation_binary_encoding: binary_encoding,
+            // store.dispatch(PrecheckerPrecheckOperationInitAction {
+            //     key,
+            //     operation: operation.clone(),
+            //     operation_binary_encoding: binary_encoding,
+            // });
+
+            store.dispatch(PrecheckerPrecheckOperationResponseAction {
+                response: PrecheckerPrecheckOperationResponse::Prevalidate(PrecheckerPrevalidate { hash: key.operation, protocol_data: serde_json::to_value(operation).unwrap() }),
             });
         }
         Action::PrecheckerPrecheckOperationInit(PrecheckerPrecheckOperationInitAction {

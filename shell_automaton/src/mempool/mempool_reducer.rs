@@ -16,7 +16,7 @@ use crate::{Action, ActionWithMeta, State};
 
 use super::mempool_state::OperationStream;
 use super::mempool_state::{MempoolOperation, OperationState};
-use super::MempoolOperationDecodedAction;
+use super::{MempoolOperationDecodedAction, MempoolSuspendPrevalidatorAction};
 use super::{
     BlockAppliedAction, MempoolBroadcastDoneAction, MempoolCleanupWaitPrevalidatorAction,
     MempoolFlushAction, MempoolMarkOperationsAsPendingAction, MempoolOperationInjectAction,
@@ -252,6 +252,7 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
         }) => {
             if let Some(local_head_state) = &mempool_state.local_head_state {
                 if *level == local_head_state.header.level() + 1 {
+                    mempool_state.new_current_head = true;
                     // new current_head
                     // remove older statuses
                     if let Some((l, _)) = mempool_state.old_operations_state.back() {
@@ -268,7 +269,11 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                             .old_operations_state
                             .push_front((local_head_state.header.level(), old_state));
                     }
+                } else {
+                    mempool_state.new_current_head = false;
                 }
+            } else {
+                mempool_state.new_current_head = true;
             }
 
             let pending = message.pending().iter().cloned();
@@ -638,6 +643,11 @@ pub fn mempool_reducer(state: &mut State, action: &ActionWithMeta) {
                 }
             }
         }
+
+        Action::MempoolSuspendPrevalidator(MempoolSuspendPrevalidatorAction {}) => {
+            mempool_state.prevalidator = None;
+        }
+
         _ => (),
     }
 }

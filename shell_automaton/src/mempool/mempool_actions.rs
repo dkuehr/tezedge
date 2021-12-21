@@ -298,3 +298,12 @@ impl EnablingCondition<State> for MempoolRpcEndorsementsStatusGetAction {
         true
     }
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MempoolSuspendPrevalidatorAction {}
+
+impl EnablingCondition<State> for MempoolSuspendPrevalidatorAction {
+    fn is_enabled(&self, _state: &State) -> bool {
+        true
+    }
+}

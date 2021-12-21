@@ -52,6 +52,8 @@ pub struct MempoolState {
     pub operations_state: BTreeMap<HashBase58<OperationHash>, MempoolOperation>,
 
     pub latest_current_head: Option<BlockHash>,
+
+    pub new_current_head: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

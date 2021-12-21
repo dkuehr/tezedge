@@ -36,8 +36,7 @@ use crate::{
     Action, ActionWithMeta, Service, State,
 };
 
-use super::{
-    mempool_actions::{
+use super::{MempoolRpcEndorsementsStatusGetAction, MempoolSuspendPrevalidatorAction, mempool_actions::{
         BlockAppliedAction, MempoolAskCurrentHeadAction, MempoolBroadcastAction,
         MempoolBroadcastDoneAction, MempoolCleanupWaitPrevalidatorAction, MempoolFlushAction,
         MempoolGetOperationsAction, MempoolGetPendingOperationsAction,
@@ -46,10 +45,7 @@ use super::{
         MempoolRemoveAppliedOperationsAction, MempoolRpcRespondAction, MempoolSendAction,
         MempoolUnregisterOperationsStreamsAction, MempoolValidateStartAction,
         MempoolValidateWaitPrevalidatorAction,
-    },
-    monitored_operation::{MempoolOperations, MonitoredOperation},
-    MempoolRpcEndorsementsStatusGetAction,
-};
+    }, monitored_operation::{MempoolOperations, MonitoredOperation}};
 
 pub fn mempool_effects<S>(store: &mut Store<State, S, Action>, action: &ActionWithMeta)
 where
@@ -74,6 +70,7 @@ where
         Action::MempoolFlush(MempoolFlushAction {}) => {
             let ops = store.state().mempool.wait_prevalidator_operations.clone();
             for operation in ops {
+                debug!(&store.state.get().log, "send to prevalidator after flush"; "operation" => operation.message_typed_hash::<OperationHash>().unwrap().to_base58_check());
                 store.dispatch(MempoolValidateStartAction { operation });
             }
             store.dispatch(MempoolCleanupWaitPrevalidatorAction {});
@@ -99,9 +96,16 @@ where
         Action::Protocol(act) => {
             match act {
                 ProtocolAction::PrevalidatorForMempoolReady(_) => {
+                    debug!(&store.state.get().log, "prevalidator is ready");
                     store.dispatch(MempoolFlushAction {});
                 }
                 ProtocolAction::OperationValidated(response) => {
+                    for op in &response.result.applied {
+                        debug!(&store.state.get().log, "operation applied"; "operation" => op.hash.to_base58_check());
+                    }
+                    for op in &response.result.branch_delayed {
+                        debug!(&store.state.get().log, "operation branch delayed"; "operation" => op.hash.to_base58_check());
+                    }
                     store.dispatch(MempoolBroadcastAction {
                         send_operations: true,
                     });
@@ -247,6 +251,7 @@ where
                     predecessor_block_metadata_hash: block_metadata_hash.clone(),
                     predecessor_ops_metadata_hash: ops_metadata_hash.clone(),
                 };
+                debug!(&store.state.get().log, "begin construction request"; "hash" => hash.to_base58_check());
                 store
                     .service()
                     .protocol()
@@ -368,6 +373,9 @@ where
                 .respond(*rpc_id, serde_json::to_value(&v).unwrap());
         }
         Action::MempoolRecvDone(MempoolRecvDoneAction { address, .. }) => {
+            if store.state.get().mempool.new_current_head {
+                store.dispatch(MempoolSuspendPrevalidatorAction {});
+            }
             if let Some(peer) = store.state().mempool.peer_state.get(address) {
                 if !peer.requesting_full_content.is_empty() {
                     store.dispatch(MempoolGetOperationsAction { address: *address });
@@ -445,6 +453,7 @@ where
                         .get(&prevalidate.hash)
                         .cloned()
                     {
+                        debug!(&store.state.get().log, "send to prevalidator after prechecking"; "operation" => operation.message_typed_hash::<OperationHash>().unwrap().to_base58_check());
                         store.dispatch(MempoolValidateStartAction { operation });
                     } else {
                         // TODO
@@ -645,6 +654,7 @@ where
             let respond = Instant::now() - start;
             debug!(&store.state.get().log, "endorsements_status response"; "prepare" => format!("{:?}", prepare), "respond" => format!("{:?}", respond));
         }
+
         _ => (),
     }
 }
