@@ -403,6 +403,8 @@ pub enum Action {
     MempoolOperationDecoded(MempoolOperationDecodedAction),
     MempoolRpcEndorsementsStatusGet(MempoolRpcEndorsementsStatusGetAction),
 
+    BlockInject(BlockInjectAction),
+
     PrecheckerPrecheckOperationRequest(PrecheckerPrecheckOperationRequestAction),
     PrecheckerPrecheckOperationResponse(PrecheckerPrecheckOperationResponseAction),
     PrecheckerCacheAppliedBlock(PrecheckerCacheAppliedBlockAction),
@@ -461,14 +463,11 @@ pub enum Action {
     CurrentHeadApply(CurrentHeadApplyAction),
     CurrentHeadPrecacheBakingRights(CurrentHeadPrecacheBakingRightsAction),
 
-    StatsCurrentHeadReceived(StatsCurrentHeadReceivedAction),
+    StatsCurrentHeadPrecheckInit(StatsCurrentHeadPrecheckInitAction),
     StatsCurrentHeadPrecheckSuccess(StatsCurrentHeadPrecheckSuccessAction),
     StatsCurrentHeadPrepareSend(StatsCurrentHeadPrepareSendAction),
     StatsCurrentHeadSent(StatsCurrentHeadSentAction),
     StatsCurrentHeadSentError(StatsCurrentHeadSentErrorAction),
-    StatsCurrentHeadRpcGetPeers(StatsCurrentHeadRpcGetPeersAction),
-    StatsCurrentHeadRpcGetApplication(StatsCurrentHeadRpcGetApplicationAction),
-    StatsCurrentHeadPrune(StatsCurrentHeadPruneAction),
 
     StorageBlockHeaderGet(kv_block_header::StorageBlockHeaderGetAction),
     StorageBlockHeaderOk(kv_block_header::StorageBlockHeaderOkAction),
