@@ -200,7 +200,8 @@ impl State {
             .peers
             .iter()
             .filter_map(|(_, p)| p.status.as_handshaked())
-            .filter_map(|peer| peer.current_head_level)
+            .filter_map(|peer| peer.current_head.as_ref())
+            .map(|current_head| current_head.header.level())
             .filter_map(|level| {
                 // calculate what percentage is our current head of
                 // peer's current head. If percentage is greater than
