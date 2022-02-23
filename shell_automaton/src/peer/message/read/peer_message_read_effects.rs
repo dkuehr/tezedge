@@ -177,15 +177,15 @@ where
                         return;
                     }
                     if !store.dispatch(PeerRemoteRequestsCurrentBranchGetInitAction {
-                        address: action.address,
+                        address: content.address,
                     }) {
                         let state = store.state();
                         let current = state
                             .peers
-                            .get_handshaked(&action.address)
+                            .get_handshaked(&content.address)
                             .map(|p| &p.remote_requests.current_branch_get);
                         slog::debug!(&state.log, "Peer - Too many GetCurrentBranch requests!";
-                                    "peer" => format!("{}", action.address),
+                                    "peer" => format!("{}", content.address),
                                     "current" => format!("{:?}", current));
                     }
                 }
@@ -195,7 +195,7 @@ where
                     }
                     update_peer_current_head(
                         store,
-                        action.address,
+                        content.address,
                         msg.current_block_header().clone(),
                     );
                 }
@@ -205,23 +205,23 @@ where
                     }
                     update_peer_current_head(
                         store,
-                        action.address,
+                        content.address,
                         msg.current_branch().current_head().clone(),
                     );
                     store.dispatch(BootstrapPeerCurrentBranchReceivedAction {
-                        peer: action.address,
+                        peer: content.address,
                         current_branch: msg.current_branch().clone(),
                     });
                 }
                 PeerMessage::GetBlockHeaders(msg) => {
                     for block_hash in msg.get_block_headers() {
                         if !store.dispatch(PeerRemoteRequestsBlockHeaderGetEnqueueAction {
-                            address: action.address,
+                            address: content.address,
                             block_hash: block_hash.clone(),
                         }) {
                             let state = store.state.get();
                             slog::debug!(&state.log, "Peer - Too many block header requests!";
-                                "peer" => format!("{}", action.address),
+                                "peer" => format!("{}", content.address),
                                 "current_requested_block_headers_len" => msg.get_block_headers().len());
                             break;
                         }
@@ -230,12 +230,12 @@ where
                 PeerMessage::GetOperationsForBlocks(msg) => {
                     for key in msg.get_operations_for_blocks() {
                         if !store.dispatch(PeerRemoteRequestsBlockOperationsGetEnqueueAction {
-                            address: action.address,
+                            address: content.address,
                             key: key.into(),
                         }) {
                             let state = store.state.get();
                             slog::debug!(&state.log, "Peer - Too many block operations requests!";
-                                "peer" => format!("{}", action.address),
+                                "peer" => format!("{}", content.address),
                                 "current_requested_block_operations_len" => msg.get_operations_for_blocks().len());
                             break;
                         }
@@ -247,8 +247,8 @@ where
                         Ok(v) => v,
                         Err(err) => {
                             slog::warn!(&state.log, "Failed to hash BlockHeader";
-                                "peer" => format!("{}", action.address),
-                                "peer_pkh" => format!("{:?}", state.peer_public_key_hash_b58check(action.address)),
+                                "peer" => format!("{}", content.address),
+                                "peer_pkh" => format!("{:?}", state.peer_public_key_hash_b58check(content.address)),
                                 "block_header" => format!("{:?}", msg.block_header()),
                                 "error" => format!("{:?}", err));
                             store.dispatch(PeersGraylistAddressAction {
@@ -257,13 +257,13 @@ where
                             return;
                         }
                     };
-                    if let Some((_, p)) = state.bootstrap.peer_interval(action.address, |p| {
+                    if let Some((_, p)) = state.bootstrap.peer_interval(content.address, |p| {
                         p.current.is_pending_block_hash_eq(&block.hash)
                     }) {
                         if !p.current.is_pending_block_level_eq(block.header.level()) {
                             slog::warn!(&state.log, "BlockHeader level didn't match expected level for requested block hash";
-                                "peer" => format!("{}", action.address),
-                                "peer_pkh" => format!("{:?}", state.peer_public_key_hash_b58check(action.address)),
+                                "peer" => format!("{}", content.address),
+                                "peer_pkh" => format!("{:?}", state.peer_public_key_hash_b58check(content.address)),
                                 "block" => format!("{:?}", block),
                                 "expected_level" => format!("{:?}", p.current.block_level()));
                             store.dispatch(PeersGraylistAddressAction {
@@ -272,18 +272,18 @@ where
                             return;
                         }
                         store.dispatch(BootstrapPeerBlockHeaderGetSuccessAction {
-                            peer: action.address,
+                            peer: content.address,
                             block,
                         });
                     } else {
                         slog::warn!(&state.log, "Received unexpected BlockHeader from peer";
-                            "peer" => format!("{}", action.address),
-                            "peer_pkh" => format!("{:?}", state.peer_public_key_hash_b58check(action.address)),
+                            "peer" => format!("{}", content.address),
+                            "peer_pkh" => format!("{:?}", state.peer_public_key_hash_b58check(content.address)),
                             "block" => format!("{:?}", &block),
-                            "expected" => format!("{:?}", state.bootstrap.peer_interval(action.address, |p| p.current.is_pending())));
+                            "expected" => format!("{:?}", state.bootstrap.peer_interval(content.address, |p| p.current.is_pending())));
                         // TODO(zura): fix us requesting same block header multiple times.
                         // store.dispatch(PeersGraylistAddressAction {
-                        //     address: action.address,
+                        //     address: content.address,
                         // });
                     }
                 }

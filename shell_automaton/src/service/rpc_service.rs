@@ -50,7 +50,9 @@ pub enum RpcRequest {
         channel: oneshot::Sender<Option<crate::service::statistics_service::BlocksApplyStats>>,
     },
 
-    InjectBlock {
+    InjectBlockStart {
+        chain_id: ChainId,
+        block_header: Arc<BlockHeader>,
         block_hash: BlockHash,
     },
     InjectOperation {
@@ -58,8 +60,6 @@ pub enum RpcRequest {
         operation: Operation,
     },
     InjectBlock {
-        chain_id: ChainId,
-        block_header: Arc<BlockHeader>,
         block_hash: BlockHash,
     },
     RequestCurrentHeadFromConnectedPeers,

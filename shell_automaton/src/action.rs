@@ -663,8 +663,6 @@ pub enum Action {
     ProtocolRunnerShutdownInit(ProtocolRunnerShutdownInitAction),
     ProtocolRunnerShutdownPending(ProtocolRunnerShutdownPendingAction),
     ProtocolRunnerShutdownSuccess(ProtocolRunnerShutdownSuccessAction),
-
-    BootstrapNewCurrentHead(BootstrapNewCurrentHeadAction),
 }
 
 impl Action {
@@ -698,18 +696,5 @@ impl<'a> From<&'a ActionWithMeta> for ActionKind {
 impl From<ActionWithMeta> for ActionKind {
     fn from(action: ActionWithMeta) -> ActionKind {
         action.action.kind()
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct BootstrapNewCurrentHeadAction {
-    pub chain_id: std::sync::Arc<crypto::hash::ChainId>,
-    pub block: std::sync::Arc<storage::BlockHeaderWithHash>,
-    pub is_bootstrapped: bool,
-}
-
-impl EnablingCondition<State> for BootstrapNewCurrentHeadAction {
-    fn is_enabled(&self, _state: &State) -> bool {
-        true
     }
 }

@@ -254,6 +254,14 @@ async fn process_injected_block(
         .log()
         .new(slog::o!("block" => block_header_with_hash.hash.to_base58_check(), "chain_id" => chain_id.to_base58_check()));
 
+    let _ = env
+        .shell_automaton_sender()
+        .send(RpcShellAutomatonMsg::InjectBlockStart {
+            chain_id: chain_id.clone(),
+            block_hash: block_header_with_hash.hash.clone(),
+            block_header: block_header_with_hash.header.clone(),
+        })
+        .await;
     // this should  allways return [is_new_block==true], as we are injecting a forged new block
     let (_, is_new_block, are_operations_complete) =
         match process_injected_block_header(env, &chain_id, &block_header_with_hash) {

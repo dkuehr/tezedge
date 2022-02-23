@@ -37,6 +37,7 @@ where
             start_applying_next_block(store);
         }
         Action::BlockApplierApplyInit(content) => {
+            let chain_id = state.config.chain_id.clone();
             store.dispatch(StorageRequestCreateAction {
                 payload: StorageRequestPayload::PrepareApplyBlockData {
                     chain_id: chain_id.into(),
