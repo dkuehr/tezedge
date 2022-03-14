@@ -410,7 +410,9 @@ where
             ..
         }) => {
             // Ask prechecker to precache endorsing rights for new level, using latest applied block
-            if store.state().mempool.first_current_head {
+            if store.state().mempool.first_current_head
+                && !store.state().config.disable_endorsements_precheck
+            {
                 if let Some(current_head) = store
                     .state
                     .get()
@@ -469,9 +471,15 @@ where
         }
         Action::MempoolOperationRecvDone(MempoolOperationRecvDoneAction { operation })
         | Action::MempoolOperationInject(MempoolOperationInjectAction { operation, .. }) => {
-            store.dispatch(PrecheckerPrecheckOperationRequestAction {
-                operation: operation.clone(),
-            });
+            if store.state().config.disable_endorsements_precheck {
+                store.dispatch(MempoolValidateStartAction {
+                    operation: operation.clone(),
+                });
+            } else {
+                store.dispatch(PrecheckerPrecheckOperationRequestAction {
+                    operation: operation.clone(),
+                });
+            }
         }
         Action::PrecheckerPrecheckOperationResponse(
             PrecheckerPrecheckOperationResponseAction { response },
